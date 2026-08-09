@@ -6,7 +6,7 @@ required. For library-only use, see [Installing skppy](../installing.md).
 ## Requirements
 
 - Blender >= 4.2.0
-- Python >= 3.10 (for the build step only - Blender supplies its own Python)
+- Python >= 3.11 (for the build step only - Blender supplies its own Python)
 
 ---
 

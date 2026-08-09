@@ -15,12 +15,14 @@ def test_python_package_identifies_public_author_and_repositories() -> None:
 
     assert project["authors"] == [AUTHOR]
     assert project["maintainers"] == [AUTHOR]
+    assert project["requires-python"] == ">=3.11"
     assert project["urls"] == {
         "Homepage": "https://github.com/dantedex/skppy",
         "Documentation": "https://dantedex.github.io/skppy/",
         "Repository": "https://github.com/dantedex/skppy.git",
         "Issues": "https://github.com/dantedex/skppy/issues",
     }
+    assert metadata["tool"]["pytest"]["ini_options"]["pythonpath"] == ["."]
 
 
 def test_license_and_public_readme_identify_dante_dex() -> None:

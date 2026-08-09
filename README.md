@@ -12,7 +12,7 @@ detection and version dispatch; semantic coverage still varies by class and
 version. `skppy.load()` detects the container and selects the correct parser
 automatically.
 
-Continuous integration tests Python 3.10 through 3.14 on Linux, macOS, and
+Continuous integration tests Python 3.11 through 3.14 on Linux, macOS, and
 Windows. The Blender addon requires Blender 4.2 or newer; its headless
 integration suite runs against Blender 4.2 LTS and the current supported major.
 

@@ -4,7 +4,7 @@
 
 | Component | Minimum version | Notes |
 |-----------|----------------|-------|
-| Python | 3.10 | Runtime and development environment |
+| Python | 3.11 | Runtime and development environment |
 | NumPy | 1.24 | Installed automatically with `skppy` |
 
 `skppy` is a Python library that depends on NumPy for geometry, UV, and image
