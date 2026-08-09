@@ -14,7 +14,7 @@ automatically.
 
 Continuous integration tests Python 3.11 through 3.14 on Linux, macOS, and
 Windows. The Blender addon requires Blender 4.2 or newer; its headless
-integration suite runs against Blender 4.2 LTS and the current supported major.
+integration suite runs against Blender 4.5 LTS and Blender 5.2 LTS.
 
 In addition to the `skppy` library, this repo contains a self-contained Blender
 addon for importing and exporting `.skp` files. The addon converts geometry,

@@ -26,4 +26,4 @@ fixtures from [skppy-tests](https://github.com/dantedex/skppy-tests) are
 suitable inputs.
 
 CI runs the same integration runner against every supported LTS line: Blender
-4.2, 4.5, and 5.2. The workflow caches each extracted Blender installation.
+4.5 and 5.2. The workflow caches each extracted Blender installation.

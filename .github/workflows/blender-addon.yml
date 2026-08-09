@@ -45,10 +45,6 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - blender-version: "4.2.22"
-            release: Blender4.2
-            archive: blender-4.2.22-linux-x64.tar.xz
-            directory: blender-4.2.22-linux-x64
           - blender-version: "4.5.11"
             release: Blender4.5
             archive: blender-4.5.11-linux-x64.tar.xz

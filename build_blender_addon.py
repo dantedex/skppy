@@ -187,16 +187,30 @@ def _blender_manifest_version(version: str) -> str:
     Return a Blender extension manifest-compatible version.
 
     ``setuptools-scm`` emits PEP 440 development versions such as
-    ``0.5.1.dev12``. Blender extension manifests reject that form because the
-    manifest version is validated as semantic-version-like. Blender 5.1 accepts
-    prerelease versions like ``0.5.1-dev.12``, so only the manifest receives
-    that conversion; the bundled Python package keeps the original PEP 440
-    version.
+    ``0.5.1.dev12`` and, for an untagged root history, ``0.1.dev2``. Blender
+    extension manifests require a three-component semantic version. The
+    manifest therefore pads omitted minor or patch components and writes the
+    PEP 440 prerelease as a SemVer prerelease. The bundled Python package keeps
+    the original PEP 440 version.
     """
-    match = re.fullmatch(r"(?P<base>\d+\.\d+\.\d+)\.dev(?P<dev>\d+)", version)
-    if match:
-        return f"{match.group('base')}-dev.{match.group('dev')}"
-    return version
+    match = re.fullmatch(
+        r"(?P<major>\d+)(?:\.(?P<minor>\d+))?(?:\.(?P<patch>\d+))?(?P<suffix>\.dev\d+)?",
+        version,
+    )
+    if not match:
+        raise ValueError(f"Cannot convert {version!r} to a Blender manifest version.")
+
+    base = ".".join(
+        (
+            match.group("major"),
+            match.group("minor") or "0",
+            match.group("patch") or "0",
+        )
+    )
+    suffix = match.group("suffix")
+    if suffix is None:
+        return base
+    return f"{base}-dev.{suffix.removeprefix('.dev')}"
 
 
 def _write_bundled_version_file(skppy_dst: Path, version: str) -> None:
