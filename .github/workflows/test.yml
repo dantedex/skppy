@@ -81,6 +81,8 @@ jobs:
         with:
           repository: dantedex/skppy-tests
           path: skppy_tests
+          # Fine-grained PAT with Contents: Read when the suite is private.
+          token: ${{ secrets.SKPPY_TESTS_TOKEN || github.token }}
           persist-credentials: false
 
       - name: Set up Python ${{ matrix.python-version }}
