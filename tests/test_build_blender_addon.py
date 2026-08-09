@@ -60,7 +60,7 @@ def test_built_addon_bundles_complete_legacy_parser(tmp_path, monkeypatch):
     archive = build_blender_addon.build(version_override="0.8.0.dev1")
 
     expected_parser_files = {
-        f"skppy/{path.relative_to(build_blender_addon.SKPPY_SRC)}"
+        f"skppy/{path.relative_to(build_blender_addon.SKPPY_SRC).as_posix()}"
         for path in (build_blender_addon.SKPPY_SRC / "parser_legacy").glob("*.py")
     }
     with zipfile.ZipFile(archive) as addon_zip:
@@ -71,6 +71,7 @@ def test_built_addon_bundles_complete_legacy_parser(tmp_path, monkeypatch):
         bundled_version = addon_zip.read("skppy/_version.py")
 
     assert expected_parser_files <= bundled_files
+    assert all("\\" not in name for name in expected_parser_files)
     assert absolute_internal_imports == set()
     assert "skppy/loader.py" in bundled_files
     assert "export_builder.py" in bundled_files
