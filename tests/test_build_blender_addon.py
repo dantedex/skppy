@@ -1,11 +1,16 @@
 # SPDX-License-Identifier: MIT
+import os
 import subprocess
 import sys
 import tomllib
 import zipfile
 
 import build_blender_addon
-from build_blender_addon import _blender_manifest_version, _manifest_with_version
+from build_blender_addon import (
+    _blender_manifest_version,
+    _display_path,
+    _manifest_with_version,
+)
 
 
 def test_blender_manifest_version_converts_pep440_dev_to_semver_prerelease():
@@ -23,6 +28,18 @@ def test_manifest_with_version_uses_blender_compatible_dev_version():
 
     assert 'version = "0.5.1-dev.12"' in text
     assert 'version = "0.5.1.dev12"' not in text
+
+
+def test_display_path_keeps_an_absolute_path_across_windows_drives(monkeypatch, tmp_path):
+    """Allow pytest temporary directories to live on a different Windows drive."""
+    path = tmp_path / "blender_skp_io-0.8.0.dev1.zip"
+
+    def _raise_different_drives(*_args):
+        raise ValueError("different drives")
+
+    monkeypatch.setattr(os.path, "relpath", _raise_different_drives)
+
+    assert _display_path(path) == path
 
 
 def test_built_addon_normalizes_untagged_root_dev_version(tmp_path, monkeypatch):

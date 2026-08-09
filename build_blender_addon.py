@@ -229,6 +229,15 @@ def _should_exclude(path: Path) -> bool:
     return False
 
 
+def _display_path(path: Path) -> Path:
+    """Return a repository-relative path when both paths share a filesystem root."""
+    try:
+        return Path(os.path.relpath(path, REPO_ROOT))
+    except ValueError:
+        # Windows cannot express a relative path between different drive letters.
+        return path
+
+
 def build(clean: bool = False, version_override: str | None = None) -> Path:
     if clean and DIST_DIR.exists():
         shutil.rmtree(DIST_DIR)
@@ -237,7 +246,7 @@ def build(clean: bool = False, version_override: str | None = None) -> Path:
     version = _derive_version(version_override)
     zip_path = DIST_DIR / f"blender_skp_io-{version}.zip"
 
-    display_path = Path(os.path.relpath(zip_path, REPO_ROOT))
+    display_path = _display_path(zip_path)
     print(f"Building {display_path} ...")
     print(f"  version: {version}")
     manifest_version = _blender_manifest_version(version)
