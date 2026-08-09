@@ -1,0 +1,1418 @@
+schema_version: 1
+last_updated: "2026-03-27"
+scope:
+  format: "SketchUp .skp"
+  payload: "model.dat TLV records"
+  note: "Observation-based map from analysed .skp files; unknown tags remain explicitly unresolved."
+
+container:
+  file_header:
+    signature_text: "SketchUp Model"
+    version_string_pattern: "{major.minor.build}"
+    zip_payload_start: "first PK\\x03\\x04 signature"
+  zip_entries_common:
+    - "model.dat"
+    - "meta/meta.dat"
+    - "styles/.../style.xml"
+    - "materials/<name>/material.xml"
+    - "materials/<name>/<texture files>"
+
+tags:
+  "0x0000":
+    name: zero_padding_or_sentinel
+    payload: "empty marker (zero-length payload)"
+    kind: marker
+    note: "Observed inside nested payloads as a structural/padding marker."
+  "0x01F4":
+    name: model_root
+    kind: container
+    children:
+      "0x0063":
+        name: legacy_version_marker
+        payload: "u32 (observed 0)"
+      "0x01F5":
+        name: model_id_counter_block
+        children:
+          "0x03E8":
+            name: model_id_counter_record
+            children:
+              "0x03E9":
+                name: model_id_counter_value
+                payload: "u32 compact little-endian integer"
+      "0x01F6":
+        name: entities_block
+        children:
+          "0x1388":
+            name: entities
+            kind: container
+            children:
+              "0x1389":
+                name: vertices
+                children:
+                  "0x09C4":
+                    name: vertex_record
+                    children:
+                      "0x05DC":
+                        name: id_wrapper
+                        children:
+                          "0x05DD":
+                            name: id_extended_payload
+                            payload: "nested TLV payload blob (variable length)"
+                          "0x05DE":
+                            name: id_value
+                            payload: "u32 compact little-endian integer"
+                      "0x09C5":
+                        name: position_xyz
+                        payload: "3 x f64 (24 bytes)"
+              "0x138A":
+                name: edges
+                children:
+                  "0x0BB8":
+                    name: edge_record
+                    children:
+                      "0x07D0":
+                        name: entity_base
+                        children:
+                          "0x07D1":
+                            name: entity_material_ref
+                            payload: "u32 compact material ID"
+                          "0x07D2":
+                            name: entity_layer_ref
+                            payload: "u32 compact layer/tag ID"
+                          "0x07D3":
+                            name: entity_runtime_flags
+                            payload: "u32 bitmask (little-endian integer; compact width observed)"
+                      "0x0BB9":
+                        name: start_vertex_id
+                        payload: "u32 compact little-endian integer"
+                      "0x0BBA":
+                        name: end_vertex_id
+                        payload: "u32 compact little-endian integer"
+                      "0x0BBB":
+                        name: curve_id_optional
+                        payload: "u32 compact little-endian integer"
+              "0x138B":
+                name: faces
+                children:
+                  "0x0DAC":
+                    name: face_record
+                    children:
+                      "0x07D0":
+                        name: entity_base
+                        children:
+                          "0x07D1":
+                            name: entity_material_ref
+                            payload: "u32 compact front-material ID"
+                          "0x07D2":
+                            name: entity_layer_ref
+                            payload: "u32 compact layer/tag ID"
+                          "0x07D3":
+                            name: entity_runtime_flags
+                            payload: "u32 bitmask (little-endian integer; compact width observed)"
+                      "0x0DAD":
+                        name: plane_abcd
+                        payload: "4 x f64 (32 bytes)"
+                      "0x0DAE":
+                        name: loops
+                        children:
+                          "0x1194":
+                            name: loop_record
+                            children:
+                              "0x1195":
+                                name: edge_uses
+                                children:
+                                  "0x0FA0":
+                                    name: edge_use
+                                    children:
+                                      "0x0FA1":
+                                        name: edge_id
+                                        payload: "u32 compact little-endian integer"
+                                      "0x0FA2":
+                                        name: reversed_flag
+                                        payload: "bool (0/1, little-endian integer)"
+                      "0x0DAF":
+                        name: face_back_material_ref
+                        payload: "u32 compact back-material ID"
+              "0x138C":
+                name: component_instances
+                children:
+                  "0x1964":
+                    name: instance_record
+                    children:
+                      "0x07D0":
+                        name: entity_base
+                        children:
+                          "0x07D1":
+                            name: entity_material_ref
+                            payload: "u32 compact material ID"
+                          "0x07D2":
+                            name: entity_layer_ref
+                            payload: "u32 compact layer/tag ID"
+                          "0x07D3":
+                            name: entity_runtime_flags
+                            payload: "u32 bitmask (little-endian integer; compact width observed)"
+                      "0x1965":
+                        name: instance_name
+                        payload: "string (UTF-8, optional)"
+                      "0x1966":
+                        name: transform_13d
+                        payload: "13 x f64 (104 bytes)"
+                      "0x1967":
+                        name: definition_id
+                        payload: "variable-length little-endian integer"
+                      "0x1968":
+                        name: guid_blob_16b
+                        payload: "raw bytes (16-byte GUID blob)"
+              "0x138D":
+                name: groups
+                children:
+                  "0x1D4C":
+                    name: group_record
+                    children:
+                      "0x1964":
+                        name: instance_record
+              "0x138E":
+                name: drawing_elements_ref_pid_container
+                payload: "packed PID list blob (variable length)"
+              "0x1390":
+                name: images
+                children:
+                  "0x1F40":
+                    name: image_record
+                    children:
+                      "0x1964":
+                        name: instance_record
+              "0x1391":
+                name: guide_lines
+                children:
+                  "0x4269":
+                    name: guide_line_record
+                    children:
+                      "0x4268":
+                        name: construction_geometry_base
+                        payload: "nested entity-base TLV"
+                      "0x426A":
+                        name: line_geometry
+                        payload: "CLine3d: point, unit direction, two f64 parameter bounds"
+                      "0x426B":
+                        name: stipple_pattern
+                        payload: "compact 16-bit line stipple pattern"
+              "0x1392":
+                name: guide_points
+                children:
+                  "0x426C":
+                    name: guide_point_record
+                    children:
+                      "0x4268":
+                        name: construction_geometry_base
+                        payload: "nested entity-base TLV"
+                      "0x426D":
+                        name: position
+                        payload: "3 x f64 (24 bytes)"
+                      "0x426E":
+                        name: reference_position
+                        payload: "3 x f64 (24 bytes)"
+                      "0x426F":
+                        name: has_reference_position
+                        payload: "compact boolean"
+              "0x1393":
+                name: section_planes
+                children:
+                  "0x445C":
+                    name: section_plane_record
+                    children:
+                      "0x445D":
+                        name: plane_abcd
+                        payload: "4 x f64 (32 bytes)"
+                      "0x445E":
+                        name: section_plane_name
+                        payload: "string (UTF-8, optional)"
+                      "0x445F":
+                        name: section_plane_symbol
+                        payload: "string (UTF-8, optional)"
+              "0x1394":
+                name: active_section_plane_ref
+                payload: "u32 compact little-endian integer"
+              "0x1396":
+                name: curves
+                children:
+                  "0x4A38":
+                    name: curve_record
+                    children:
+                      "0x05DC":
+                        name: id_wrapper
+                      "0x4A39":
+                        name: edge_count
+                        payload: "u32 compact little-endian integer"
+                      "0x4A3A":
+                        name: curve_polygon_flag
+                        payload: "bool (0/1, little-endian integer)"
+                      "0x4A3B":
+                        name: first_edge_id
+                        payload: "u32 compact little-endian integer"
+                      "0x4A3C":
+                        name: last_edge_id
+                        payload: "u32 compact little-endian integer"
+              "0x1397":
+                name: arc_curves
+                children:
+                  "0x4C2C":
+                    name: arc_curve_record
+                    children:
+                      "0x4A38":
+                        name: embedded_curve_record
+                      "0x4C2D":
+                        name: arc_specific_payload
+                        payload: "raw bytes (unresolved)"
+              "0x1399":
+                name: dimensions
+                children:
+                  "0x5BCC":
+                    name: dimension_record
+                    children:
+                      "0x59D8":
+                        name: dimension_base
+                        children:
+                          "0x59D9":
+                            name: dimension_text
+                            payload: "string (UTF-8, optional)"
+                          "0x59DA":
+                            name: dimension_font_ref
+                            payload: "u32 compact little-endian integer"
+                          "0x59DB":
+                            name: dimension_3d_text_flag
+                            payload: "bool (0/1, little-endian integer)"
+                          "0x59DC":
+                            name: dimension_arrow_type
+                            payload: "u32 compact little-endian integer"
+                      "0x5BCD":
+                        name: dimension_linear_anchor_a
+                        children:
+                          "0x5208":
+                            name: dimension_anchor_record
+                            children:
+                              "0x5209":
+                                name: dimension_anchor_enabled
+                                payload: "bool (0/1, little-endian integer)"
+                              "0x520A":
+                                name: dimension_anchor_point
+                                payload: "3 x f64 (24 bytes)"
+                              "0x520B":
+                                name: dimension_anchor_style_ref_a
+                                children:
+                                  "0x53FC":
+                                    name: dimension_anchor_style_record
+                                    children:
+                                      "0x53FE":
+                                        name: dimension_anchor_style_id
+                                        payload: "u32 compact little-endian integer"
+                              "0x520C":
+                                name: dimension_anchor_style_ref_b
+                                children:
+                                  "0x53FC":
+                                    name: dimension_anchor_style_record
+                      "0x5BCE":
+                        name: dimension_linear_anchor_b
+                        children:
+                          "0x5208":
+                            name: dimension_anchor_record
+                      "0x5BCF":
+                        name: dimension_linear_direction_a
+                        payload: "raw bytes (unresolved)"
+                      "0x5BD0":
+                        name: dimension_linear_direction_b
+                        payload: "raw bytes (unresolved)"
+                      "0x5BD1":
+                        name: dimension_linear_flags
+                        payload: "u32 bitmask (little-endian integer)"
+                      "0x5BD2":
+                        name: dimension_linear_offset_primary
+                        payload: "raw bytes (unresolved)"
+                      "0x5BD3":
+                        name: dimension_linear_offset_secondary
+                        payload: "raw bytes (unresolved)"
+                      "0x5BD4":
+                        name: dimension_linear_mode
+                        payload: "u32 compact little-endian integer"
+              "0x139D":
+                name: openings
+                children:
+                  "0x7530":
+                    name: opening_record
+                    children:
+                      "0x07D0":
+                        name: entity_base
+                      "0x7531":
+                        name: opening_origin_xyz
+                        payload: "3 x f64 (24 bytes)"
+                      "0x7532":
+                        name: opening_x_axis_xyz
+                        payload: "3 x f64 (24 bytes)"
+                      "0x7533":
+                        name: opening_y_axis_xyz
+                        payload: "3 x f64 (24 bytes)"
+                      "0x7534":
+                        name: opening_z_axis_xyz
+                        payload: "3 x f64 (24 bytes)"
+                      "0x7535":
+                        name: opening_flags_or_type
+                        payload: "u32 flag/type field (little-endian integer)"
+              "0x139B":
+                name: entities_metadata_block
+                children:
+                  "0x639F":
+                    name: entities_metadata_record
+                    children:
+                      "0x63A0":
+                        name: entities_metadata_payload
+                        payload: "empty marker (zero-length payload)"
+              "0x139E":
+                name: entities_sentinel
+                payload: "empty marker (zero-length payload)"
+              "0x139F":
+                name: component_state_flags
+                payload: "u32 bitmask (little-endian integer)"
+              "0x13A0":
+                name: definition_entities_bounds
+                payload: "6 x f64 (48 bytes)"
+      "0x01F7":
+        name: materials_block
+        children:
+          "0x30D4":
+            name: materials_container
+            children:
+              "0x30D5":
+                name: materials_list
+                children:
+                  "0x32C8":
+                    name: material_record
+                    children:
+                      "0x32CA":
+                        name: material_embedded_context
+                        payload: "bool (0 for global material, 1 for layer-embedded material)"
+                      "0x32CB":
+                        name: material_texture_payload
+                        payload: "material texture payload blob (often empty in sampled files)"
+                      "0x32CC":
+                        name: material_name
+                        payload: "string (UTF-8)"
+                      "0x32CD":
+                        name: material_aux_u32
+                        payload: "optional u32; semantics not yet established"
+              "0x30D6":
+                name: materials_current_material_ref
+                payload: "u32 compact little-endian integer"
+      "0x01F8":
+        name: layers_block
+        children:
+          "0x3A98":
+            name: layers_container
+            children:
+              "0x3A99":
+                name: layer_list
+                children:
+                  "0x3C8C":
+                    name: layer_record
+                    children:
+                      "0x05DC":
+                        name: id_wrapper
+                      "0x3C8D":
+                        name: layer_name
+                        payload: "string (UTF-8)"
+                      "0x3C8E":
+                        name: layer_visible
+                        payload: "bool (0/1, little-endian integer)"
+                      "0x3C8F":
+                        name: layer_material_inline
+                        payload: "nested 0x32C8 material record; compact material ID in early variants"
+                      "0x3C90":
+                        name: layer_scene_behavior_flags
+                        payload: "u32 bitmask (little-endian integer)"
+                      "0x3C91":
+                        name: layer_custom_line_style_ref
+                        payload: "u32 compact little-endian integer"
+              "0x3A9A":
+                name: active_layer_id
+                payload: "u32 compact little-endian integer"
+              "0x3A9B":
+                name: layer_folder_tree
+                children:
+                  "0x3E80":
+                    name: folder_node
+                    children:
+                      "0x3E81":
+                        name: folder_name
+                        payload: "empty marker (zero-length payload)"
+                      "0x3E82":
+                        name: visible_flag
+                        payload: "bool (0/1, little-endian integer)"
+                      "0x3E83":
+                        name: child_layer_groups
+                        payload: "empty marker (zero-length payload)"
+                      "0x3E84":
+                        name: child_layers_ref_ids
+                        payload: "empty marker (zero-length payload)"
+                      "0x3E85":
+                        name: visible_on_new_scenes_flag
+                        payload: "bool (0/1, little-endian integer)"
+      "0x01F9":
+        name: component_definitions_block
+        children:
+          "0x0063":
+            name: legacy_version_marker
+            payload: "u32 (observed 0)"
+          "0x1770":
+            name: definitions_container
+            children:
+              "0x0063":
+                name: legacy_version_marker
+                payload: "u32 (observed 0)"
+              "0x1771":
+                name: definitions_list
+                children:
+                  "0x0063":
+                    name: legacy_version_marker
+                    payload: "u32 (observed 0)"
+                  "0x157C":
+                    name: definition_record
+                    children:
+                      "0x07D0":
+                        name: definition_entity_base
+                        children:
+                          "0x05DC":
+                            name: id_wrapper
+                            children:
+                              "0x05DE":
+                                name: definition_id
+                      "0x1388":
+                        name: definition_entities
+                      "0x157D":
+                        name: guid_blob_16b
+                        payload: "raw bytes (16-byte GUID blob)"
+                      "0x157E":
+                        name: definition_name
+                        payload: "string (UTF-8)"
+                      "0x157F":
+                        name: definition_description
+                        payload: "empty marker (zero-length payload)"
+                      "0x1580":
+                        name: definition_loaded_from
+                        payload: "empty marker (zero-length payload)"
+                      "0x1581":
+                        name: definition_timestamp
+                        payload: "u32 compact little-endian integer"
+                      "0x1582":
+                        name: definition_modified_flag
+                        payload: "bool (0/1, little-endian integer)"
+                      "0x1583":
+                        name: definition_type
+                        payload: "u32 compact little-endian integer"
+                      "0x1585":
+                        name: packed_payload
+                        children:
+                          "0x251C":
+                            name: packed_payload_record
+                            children:
+                              "0x251D":
+                                name: packed_payload_value
+                                payload: "nested TLV payload blob (variable length)"
+                              "0x251E":
+                                name: packed_thumbnail_record
+                                children:
+                                  "0x2328":
+                                    name: packed_thumbnail_entry
+                                    children:
+                                      "0x2329":
+                                        name: packed_thumbnail_kind
+                                        payload: "u32"
+                                      "0x232A":
+                                        name: packed_thumbnail_path
+                                        payload: "string (UTF-8)"
+                      "0x1B58":
+                        name: component_behavior_block
+                        children:
+                          "0x1B59":
+                            name: behavior_snap_mode
+                            payload: "u32 compact little-endian integer"
+                          "0x1B5A":
+                            name: behavior_no_scale_mask
+                            payload: "u32 compact little-endian integer"
+                          "0x1B5B":
+                            name: behavior_snap_enabled
+                            payload: "bool (0/1, little-endian integer)"
+                          "0x1B5C":
+                            name: behavior_cuts_opening
+                            payload: "bool (0/1, little-endian integer)"
+                          "0x1B5D":
+                            name: behavior_always_face_camera
+                            payload: "bool (0/1, little-endian integer)"
+                          "0x1B5E":
+                            name: behavior_shadows_face_sun
+                            payload: "bool (0/1, little-endian integer)"
+      "0x01FA":
+        name: model_camera_block
+        children:
+          "0x34BC":
+            name: camera_record
+            children:
+              "0x34BD":
+                name: eye
+                payload: "3 x f64 (24 bytes)"
+              "0x34BE":
+                name: target
+                payload: "3 x f64 (24 bytes)"
+              "0x34BF":
+                name: up
+                payload: "3 x f64 (24 bytes)"
+              "0x34C0":
+                name: camera_near_clipping_distance
+                payload: "f64"
+              "0x34C1":
+                name: camera_far_clipping_distance
+                payload: "f64"
+              "0x34C2":
+                name: camera_is_perspective
+                payload: "bool (0/1, little-endian integer)"
+              "0x34C3":
+                name: camera_ortho_height
+                payload: "f64"
+              "0x34C4":
+                name: camera_perspective_fov
+                payload: "f64"
+              "0x34C5":
+                name: camera_aspect_ratio
+                payload: "f64"
+              "0x34C6":
+                name: camera_fov_is_height
+                payload: "bool (0/1, little-endian integer)"
+              "0x34C7":
+                name: camera_legacy_flag
+                payload: "bool (0/1, little-endian integer)"
+              "0x34C8":
+                name: camera_description
+                payload: "string (UTF-8, optional)"
+              "0x34C9":
+                name: camera_image_width
+                payload: "f64"
+              "0x34CA":
+                name: camera_is_2d
+                payload: "bool (0/1, little-endian integer)"
+              "0x34CB":
+                name: camera_2d_scale
+                payload: "f64"
+              "0x34CC":
+                name: camera_2d_center_x
+                payload: "f64"
+              "0x34CD":
+                name: camera_2d_center_y
+                payload: "f64"
+              "0x34CE":
+                name: camera_allow_clipping_in_parallel_projection
+                payload: "bool (0/1, little-endian integer)"
+      "0x01FB":
+        name: rendering_options_block
+        children:
+          "0x733C":
+            name: rendering_options
+            children:
+              "0x733D":
+                name: rendering_option_render_mode
+                payload: "u32 compact little-endian integer"
+              "0x733E":
+                name: rendering_option_model_transparency
+                payload: "bool (0/1, little-endian integer)"
+              "0x733F":
+                name: rendering_option_material_transparency
+                payload: "bool (0/1, little-endian integer)"
+              "0x7340":
+                name: rendering_option_texture
+                payload: "bool (0/1, little-endian integer)"
+              "0x7341":
+                name: rendering_option_edge_display_mode
+                payload: "u32 compact little-endian integer"
+              "0x7342":
+                name: rendering_option_edge_type
+                payload: "u32 compact little-endian integer"
+              "0x7343":
+                name: rendering_option_display_sketch_axes
+                payload: "bool (0/1, little-endian integer)"
+              "0x7344":
+                name: rendering_option_display_text
+                payload: "bool (0/1, little-endian integer)"
+              "0x7345":
+                name: rendering_option_display_dims
+                payload: "bool (0/1, little-endian integer)"
+              "0x7346":
+                name: rendering_option_hide_construction_geometry
+                payload: "bool (0/1, little-endian integer)"
+              "0x7347":
+                name: rendering_option_display_color_by_layer
+                payload: "bool (0/1, little-endian integer)"
+              "0x7348":
+                name: rendering_option_edge_color_mode
+                payload: "u32 compact little-endian integer"
+              "0x7349":
+                name: rendering_option_display_instance_axes
+                payload: "bool (0/1, little-endian integer)"
+              "0x734A":
+                name: rendering_option_face_color_mode
+                payload: "u32 compact little-endian integer"
+              "0x734B":
+                name: rendering_option_jitter_edges
+                payload: "bool (0/1, little-endian integer)"
+              "0x734C":
+                name: rendering_option_line_style_edges
+                payload: "bool (0/1, little-endian integer)"
+              "0x734D":
+                name: rendering_option_extend_lines
+                payload: "bool (0/1, little-endian integer)"
+              "0x734E":
+                name: rendering_option_line_extension
+                payload: "u32 compact little-endian integer"
+              "0x734F":
+                name: rendering_option_draw_silhouettes
+                payload: "bool (0/1, little-endian integer)"
+              "0x7350":
+                name: rendering_option_silhouette_width
+                payload: "u32 compact little-endian integer"
+              "0x7351":
+                name: rendering_option_draw_depth_que
+                payload: "bool (0/1, little-endian integer)"
+              "0x7352":
+                name: rendering_option_depth_que_width
+                payload: "u32 compact little-endian integer"
+              "0x7353":
+                name: rendering_option_draw_line_ends
+                payload: "bool (0/1, little-endian integer)"
+              "0x7354":
+                name: rendering_option_line_end_width
+                payload: "u32 compact little-endian integer"
+              "0x7355":
+                name: rendering_option_draw_profiles_only
+                payload: "bool (0/1, little-endian integer)"
+              "0x7356":
+                name: rendering_option_draw_back_edges
+                payload: "bool (0/1, little-endian integer)"
+              "0x7357":
+                name: rendering_option_background_color
+                payload: "u32 ARGB color"
+              "0x7358":
+                name: rendering_option_foreground_color
+                payload: "u32 ARGB color"
+              "0x7359":
+                name: rendering_option_highlight_color
+                payload: "u32 ARGB color"
+              "0x735A":
+                name: rendering_option_locked_color
+                payload: "u32 ARGB color"
+              "0x735B":
+                name: rendering_option_construction_color
+                payload: "u32 ARGB color"
+              "0x735C":
+                name: rendering_option_face_front_color
+                payload: "u32 ARGB color"
+              "0x735D":
+                name: rendering_option_face_back_color
+                payload: "u32 ARGB color"
+              "0x735E":
+                name: rendering_option_display_watermarks
+                payload: "bool (0/1, little-endian integer)"
+              "0x735F":
+                name: rendering_option_display_fog
+                payload: "bool (0/1, little-endian integer)"
+              "0x7360":
+                name: rendering_option_fog_color
+                payload: "u32 ARGB color"
+              "0x7361":
+                name: rendering_option_fog_use_background_color
+                payload: "bool (0/1, little-endian integer)"
+              "0x7362":
+                name: rendering_option_fog_start_dist
+                payload: "f64"
+              "0x7363":
+                name: rendering_option_fog_end_dist
+                payload: "f64"
+              "0x7364":
+                name: rendering_option_fog_hint_mode
+                payload: "u32 compact little-endian integer"
+              "0x7365":
+                name: rendering_option_sky_color
+                payload: "u32 ARGB color"
+              "0x7366":
+                name: rendering_option_horizon_color
+                payload: "u32 ARGB color"
+              "0x7367":
+                name: rendering_option_ground_color
+                payload: "u32 ARGB color"
+              "0x7368":
+                name: rendering_option_draw_horizon
+                payload: "bool (0/1, little-endian integer)"
+              "0x7369":
+                name: rendering_option_draw_ground
+                payload: "bool (0/1, little-endian integer)"
+              "0x736A":
+                name: rendering_option_draw_underground
+                payload: "bool (0/1, little-endian integer)"
+              "0x736B":
+                name: rendering_option_ground_transparency
+                payload: "u32 compact little-endian integer"
+              "0x736C":
+                name: rendering_option_inactive_fade
+                payload: "f64"
+              "0x736D":
+                name: rendering_option_instance_fade
+                payload: "f64"
+              "0x736E":
+                name: rendering_option_inactive_hidden
+                payload: "bool (0/1, little-endian integer)"
+              "0x736F":
+                name: rendering_option_instance_hidden
+                payload: "bool (0/1, little-endian integer)"
+              "0x7370":
+                name: rendering_option_section_active_color
+                payload: "u32 ARGB color"
+              "0x7371":
+                name: rendering_option_section_inactive_color
+                payload: "u32 ARGB color"
+              "0x7372":
+                name: rendering_option_section_default_cut_color
+                payload: "u32 ARGB color"
+              "0x7373":
+                name: rendering_option_section_default_fill_color
+                payload: "u32 ARGB color"
+              "0x7374":
+                name: rendering_option_section_cut_width
+                payload: "u32 compact little-endian integer"
+              "0x7375":
+                name: rendering_option_section_display_mode
+                payload: "u32 bitmask: bit 0 displays section planes; bit 1 displays section cuts"
+              "0x7376":
+                name: rendering_option_section_cut_filled
+                payload: "bool (0/1, little-endian integer)"
+              "0x7377":
+                name: rendering_option_transparency_sort
+                payload: "u32 compact little-endian integer"
+              "0x7378":
+                name: rendering_option_xray_opacity
+                payload: "f64"
+              "0x7379":
+                name: rendering_option_draw_soft_edges
+                payload: "bool (0/1, little-endian integer)"
+              "0x737A":
+                name: rendering_option_soft_edge_limit_radians
+                payload: "f64"
+              "0x737B":
+                name: rendering_option_draw_smooth_edges
+                payload: "bool (0/1, little-endian integer)"
+              "0x737C":
+                name: rendering_option_photomatch_draw_background
+                payload: "bool (0/1, little-endian integer)"
+              "0x737D":
+                name: rendering_option_photomatch_background_opacity
+                payload: "f64"
+              "0x737E":
+                name: rendering_option_photomatch_draw_overlay
+                payload: "bool (0/1, little-endian integer)"
+              "0x737F":
+                name: rendering_option_photomatch_overlay_opacity
+                payload: "f64"
+              "0x7380":
+                name: rendering_option_draw_hidden_geometry
+                payload: "bool (0/1, little-endian integer)"
+              "0x7381":
+                name: rendering_option_draw_hidden_objects
+                payload: "bool (0/1, little-endian integer)"
+              "0x7382":
+                name: rendering_option_hide_custom_control_points
+                payload: "bool (0/1, little-endian integer)"
+              "0x7383":
+                name: rendering_option_ambient_occlusion
+                payload: "bool (0/1, little-endian integer)"
+              "0x7385":
+                name: rendering_option_ambient_occlusion_distance
+                payload: "u32 compact little-endian integer"
+              "0x7386":
+                name: rendering_option_ambient_occlusion_intensity
+                payload: "u32 compact little-endian integer"
+              "0x7389":
+                name: rendering_option_ambient_occlusion_multiplier
+                payload: "u32 compact little-endian integer"
+              "0x738A":
+                name: rendering_option_ambient_occlusion_color
+                payload: "u32 ARGB color"
+              "0x738B":
+                name: rendering_option_ambient_occlusion_color_enabled
+                payload: "bool (0/1, little-endian integer)"
+      "0x01FC":
+        name: model_view_settings_block
+        children:
+          "0x4650":
+            name: model_view_settings_record
+            children:
+              "0x4651":
+                name: sketch_axes_origin
+                payload: "3 x f64 (24 bytes)"
+              "0x4652":
+                name: sketch_axes_x_axis
+                payload: "3 x f64 (24 bytes)"
+                children:
+                  "0x3FF0":
+                    name: sketch_axes_flags_3ff0
+                    payload: "u32 bitmask (observed as empty payload in sampled files)"
+              "0x4653":
+                name: sketch_axes_y_axis
+                payload: "3 x f64 (24 bytes)"
+              "0x4654":
+                name: sketch_axes_z_axis
+                payload: "3 x f64 (24 bytes)"
+      "0x01FD":
+        name: fonts_block
+        children:
+          "0x4E20":
+            name: fonts_container
+            children:
+              "0x4E21":
+                name: fonts_list
+                children:
+                  "0x5014":
+                    name: font_record
+                    children:
+                      "0x5015":
+                        name: font_face_name
+                        payload: "string (UTF-8)"
+                      "0x5016":
+                        name: font_bold_flag
+                        payload: "bool (0/1, little-endian integer)"
+                      "0x5017":
+                        name: font_italic_flag
+                        payload: "bool (0/1, little-endian integer)"
+                      "0x5018":
+                        name: font_point_size
+                        payload: "u32 compact little-endian integer"
+                      "0x5019":
+                        name: font_use_world_size_flag
+                        payload: "bool (0/1, little-endian integer)"
+                      "0x501A":
+                        name: font_world_size
+                        payload: "f64"
+      "0x01FE":
+        name: text_style_block
+        children:
+          "0x57E4":
+            name: text_style_record
+            children:
+              "0x57E5":
+                name: text_style_font_ref
+                payload: "u32 compact little-endian integer"
+              "0x57E6":
+                name: text_style_screen_font_ref
+                payload: "u32 compact little-endian integer"
+              "0x57E7":
+                name: text_style_arrow_type
+                payload: "u32 compact little-endian integer"
+              "0x57E8":
+                name: text_style_line_weight
+                payload: "u32 compact little-endian integer"
+              "0x57E9":
+                name: text_style_hide_out_of_plane
+                payload: "bool (0/1, little-endian integer)"
+              "0x57EA":
+                name: text_style_leader_type
+                payload: "u32 compact little-endian integer"
+              "0x57EB":
+                name: text_style_display_leader
+                payload: "bool (0/1, little-endian integer)"
+              "0x57EC":
+                name: text_style_color
+                payload: "u32 ARGB color"
+              "0x57ED":
+                name: text_style_screen_color
+                payload: "u32 ARGB color"
+      "0x01FF":
+        name: dimension_style_block
+        children:
+          "0x5FB4":
+            name: dimension_style_record
+            children:
+              "0x5FB5":
+                name: dimension_style_font_ref
+                payload: "u32 compact little-endian integer"
+              "0x5FB6":
+                name: dimension_style_3d_text
+                payload: "bool (0/1, little-endian integer)"
+              "0x5FB7":
+                name: dimension_style_always_readable
+                payload: "bool (0/1, little-endian integer)"
+              "0x5FB8":
+                name: dimension_style_extension_offset
+                payload: "u32 compact little-endian integer"
+              "0x5FB9":
+                name: dimension_style_extension_overshoot
+                payload: "u32 compact little-endian integer"
+              "0x5FBA":
+                name: dimension_style_line_weight
+                payload: "u32 compact little-endian integer"
+              "0x5FBB":
+                name: dimension_style_arrow_type
+                payload: "u32 compact little-endian integer"
+              "0x5FBC":
+                name: dimension_style_arrow_size
+                payload: "u32 compact little-endian integer"
+              "0x5FBD":
+                name: dimension_style_highlight_non_associative
+                payload: "bool (0/1, little-endian integer)"
+              "0x5FBE":
+                name: dimension_style_highlight_non_associative_color
+                payload: "u32 ARGB color"
+              "0x5FBF":
+                name: dimension_style_show_radial_diameter_prefix
+                payload: "bool (0/1, little-endian integer)"
+              "0x5FC0":
+                name: dimension_style_hide_out_of_plane
+                payload: "bool (0/1, little-endian integer)"
+              "0x5FC1":
+                name: dimension_style_hide_out_of_plane_value
+                payload: "f64"
+              "0x5FC2":
+                name: dimension_style_hide_small
+                payload: "bool (0/1, little-endian integer)"
+              "0x5FC3":
+                name: dimension_style_hide_small_value
+                payload: "f64"
+              "0x5FC4":
+                name: dimension_style_color
+                payload: "u32 ARGB color"
+              "0x5FC5":
+                name: dimension_style_text_color
+                payload: "u32 ARGB color"
+              "0x5FC6":
+                name: dimension_style_text_position
+                payload: "u32 compact little-endian integer"
+      "0x0200":
+        name: options_manager_block
+        children:
+          "0x61A8":
+            name: options_manager_record
+            children:
+              "0x61A9":
+                name: options_provider_list
+                children:
+                  "0x61AA":
+                    name: options_provider_record
+                    children:
+                      "0x61AB":
+                        name: options_provider_name
+                        payload: "string (UTF-8)"
+                      "0x61AC":
+                        name: options_key_table
+                        children:
+                          "0x61AD":
+                            name: options_key_name
+                            payload: "string (UTF-8)"
+      "0x0201":
+        name: model_empty_marker_0201
+        payload: "empty marker (zero-length payload)"
+      "0x0203":
+        name: watermarks_block
+        children:
+          "0x2CEC":
+            name: watermark_manager_record
+            children:
+              "0x2CED":
+                name: watermark_list
+                payload: "empty marker (zero-length payload)"
+              "0x2CEE":
+                name: watermark_serialized_count
+                payload: "u32 compact little-endian integer"
+      "0x0204":
+        name: shadow_info_block
+        children:
+          "0x6590":
+            name: shadow_info_record
+            children:
+              "0x6595":
+                name: shadow_info_longitude
+                payload: "f64"
+              "0x6596":
+                name: shadow_info_latitude
+                payload: "f64"
+              "0x6591":
+                name: shadow_info_time
+                payload: "u32 compact little-endian integer"
+              "0x6592":
+                name: shadow_info_daylight_savings
+                payload: "bool (0/1, little-endian integer)"
+              "0x6593":
+                name: shadow_info_city
+                payload: "UTF-8 string"
+              "0x6594":
+                name: shadow_info_country
+                payload: "UTF-8 string"
+              "0x6597":
+                name: shadow_info_timezone_offset
+                payload: "f64"
+              "0x6598":
+                name: shadow_info_north_direction
+                payload: "3 x f64 (24 bytes)"
+              "0x6599":
+                name: shadow_info_display_shadows
+                payload: "bool (0/1, little-endian integer)"
+              "0x659A":
+                name: shadow_info_display_north
+                payload: "bool (0/1, little-endian integer)"
+              "0x659B":
+                name: shadow_info_display_on_all_faces
+                payload: "bool (0/1, little-endian integer)"
+              "0x659C":
+                name: shadow_info_display_on_ground_plane
+                payload: "bool (0/1, little-endian integer)"
+              "0x659D":
+                name: shadow_info_edges_cast_shadows
+                payload: "bool (0/1, little-endian integer)"
+              "0x659E":
+                name: shadow_info_light
+                payload: "u32 compact little-endian integer"
+              "0x659F":
+                name: shadow_info_dark
+                payload: "u32 compact little-endian integer"
+              "0x65A0":
+                name: shadow_info_use_sun_for_all_shading
+                payload: "bool (0/1, little-endian integer)"
+      "0x0205":
+        name: active_schemata_block
+        children:
+          "0x6784":
+            name: active_schema_zip_file_record
+            payload: "string (UTF-8, optional)"
+      "0x0206":
+        name: styles_registry_block
+        children:
+          "0x6978":
+            name: styles_registry
+            children:
+              "0x6979":
+                name: style_list
+                children:
+                  "0x6B6C":
+                    name: style_descriptor
+                    children:
+                      "0x6B6D":
+                        name: style_guid_blob_16b
+                        payload: "2 x f64 (16 bytes)"
+                      "0x6B6E":
+                        name: style_display_name
+                        payload: "empty marker (zero-length payload)"
+                      "0x6B6F":
+                        name: style_file_name
+                        payload: "string (UTF-8)"
+                      "0x6B70":
+                        name: style_watermark_reference_ids
+                        payload: "empty marker (zero-length payload)"
+              "0x697A":
+                name: active_style_ref
+                payload: "u32 compact little-endian integer"
+              "0x697B":
+                name: inline_style_override
+                children:
+                  "0x6B6C":
+                    name: style_descriptor
+              "0x697C":
+                name: style_manager_selected_style_dirty
+                payload: "bool (0/1, little-endian integer)"
+      "0x0207":
+        name: scenes_block
+        children:
+          "0x6D60":
+            name: scenes_container
+            children:
+              "0x6D61":
+                name: scenes_list
+                children:
+                  "0x7148":
+                    name: scene_record
+                    children:
+                      "0x6F54":
+                        name: scene_base_record
+                        children:
+                          "0x05DC":
+                            name: id_wrapper
+                          "0x6F55":
+                            name: scene_name
+                            payload: "string (UTF-8, optional)"
+                          "0x6F56":
+                            name: scene_description
+                            payload: "string (UTF-8, optional)"
+                      "0x7149":
+                        name: scene_flags_u32
+                        payload: "u32 bitmask (little-endian integer)"
+                      "0x714A":
+                        name: scene_camera_snapshot
+                        children:
+                          "0x34BC":
+                            name: camera_record
+                      "0x714B":
+                        name: scene_hidden_entities_ref_ids
+                        payload: "u32 compact little-endian integer"
+                      "0x714C":
+                        name: scene_style_ref
+                        payload: "u32 compact little-endian integer"
+                      "0x714D":
+                        name: scene_rendering_options_snapshot
+                        children:
+                          "0x733C":
+                            name: rendering_options_record
+                      "0x714E":
+                        name: scene_shadow_info_snapshot
+                        payload: "raw bytes (unresolved)"
+                      "0x714F":
+                        name: scene_axes_snapshot
+                        payload: "raw bytes (unresolved)"
+                      "0x7150":
+                        name: scene_hidden_layers_ref_ids
+                        payload: "u32 compact little-endian integer"
+                      "0x7151":
+                        name: scene_active_section_planes_ref_ids
+                        payload: "u32 compact little-endian integer"
+                      "0x7152":
+                        name: scene_show_in_slideshow
+                        payload: "bool (0/1, little-endian integer)"
+                      "0x7153":
+                        name: scene_reserved_ustring
+                        payload: "raw bytes (unresolved)"
+                      "0x7154":
+                        name: scene_transition_time_override
+                        payload: "raw bytes (unresolved)"
+                      "0x7155":
+                        name: scene_delay_time_override
+                        payload: "raw bytes (unresolved)"
+                      "0x7156":
+                        name: scene_background_image_ref
+                        payload: "u32 compact little-endian integer"
+                      "0x7157":
+                        name: scene_use_thumbnail
+                        payload: "raw bytes (unresolved)"
+                      "0x7158":
+                        name: scene_thumbnail_image_rep
+                        payload: "raw bytes (unresolved)"
+                      "0x7159":
+                        name: scene_hidden_layer_groups_ref_ids
+                        payload: "u32 compact little-endian integer"
+                      "0x715A":
+                        name: scene_environment_ref
+                        payload: "u32 compact little-endian integer"
+                      "0x715B":
+                        name: scene_environment_settings
+                        payload: "raw bytes (unresolved)"
+                      "0x715C":
+                        name: scene_foreground_images_ref_ids
+                        payload: "u32 compact little-endian integer"
+      "0x0208":
+        name: line_styles_block
+        children:
+          "0x4074":
+            name: line_styles_record
+            children:
+              "0x4075":
+                name: line_style_list
+                children:
+                  "0x4076":
+                    name: line_style_record
+                    children:
+                      "0x4077":
+                        name: line_style_name
+                        payload: "string (UTF-8)"
+                      "0x4078":
+                        name: line_style_dash_pattern_text
+                        payload: "string (UTF-8)"
+                      "0x4079":
+                        name: line_style_stipple_scale
+                        payload: "f64"
+                      "0x407A":
+                        name: line_style_line_width_points
+                        payload: "f64"
+                      "0x407B":
+                        name: line_style_color_argb
+                        payload: "u32 ARGB color"
+                      "0x407C":
+                        name: line_style_mutability_flag
+                        payload: "bool (0/1, little-endian integer)"
+      "0x0209":
+        name: model_properties_block
+        children:
+          "0x36B1":
+            name: attribute_dictionaries_root
+            children:
+              "0x36B2":
+                name: attribute_dictionary_record
+                children:
+                  "0x2710":
+                    name: texture_projection_pair_record
+                    children:
+                      "0x36B0":
+                        name: attribute_dictionary_header
+                        payload: "attribute dictionary header marker (zero-length in sampled files)"
+                      "0x2711":
+                        name: texture_projection_front_record
+                        children:
+                          "0x2713":
+                            name: texture_projection_payload
+                      "0x2712":
+                        name: texture_projection_back_record
+                        children:
+                          "0x2713":
+                            name: texture_projection_payload
+                  "0x2713":
+                    name: texture_projection_payload
+                    children:
+                      "0x2714":
+                        name: texture_projection_enabled
+                        payload: "bool (0/1, little-endian integer)"
+                      "0x2715":
+                        name: texture_projection_transform_9d
+                        payload: "9 x f64 (72 bytes)"
+                      "0x2716":
+                        name: texture_projection_origin
+                        payload: "3 x f64 (24 bytes)"
+                      "0x2717":
+                            name: texture_projection_push_pins
+                            children:
+                              "0x2718":
+                                name: texture_projection_push_pin_record
+                                children:
+                                  "0x2719":
+                                    name: texture_projection_push_pin_texture_position
+                                    payload: "2 x f64 (16 bytes)"
+                                  "0x271A":
+                                    name: texture_projection_push_pin_model_position
+                                    payload: "2 x f64 (16 bytes)"
+                  "0x36B3":
+                    name: attribute_dictionary_data
+                    children:
+                      "0x36B0":
+                        name: attribute_dictionary_header
+                        payload: "attribute dictionary header marker (zero-length in sampled files)"
+                      "0x36B4":
+                        name: attribute_dictionary_name
+                        payload: "string (UTF-8)"
+                      "0x36B5":
+                        name: attribute_dictionary_entries
+                        children:
+                          "0x36B6":
+                            name: attribute_key_name
+                            payload: "string (UTF-8)"
+                          "0x36B7":
+                            name: attribute_entry_flags
+                            payload: "u32 bitmask (little-endian integer)"
+                          "0x38A4":
+                            name: typed_value_record
+                            children:
+                              "0x38A7":
+                                name: typed_value_type_code
+                                payload: "u32 compact little-endian integer"
+                              "0x38A8":
+                                name: typed_value_int32_payload
+                                payload: "u32 compact little-endian integer"
+                              "0x38A9":
+                                name: typed_value_f64_payload
+                                payload: "f64"
+                              "0x38AA":
+                                name: typed_value_bool_payload
+                                payload: "bool (0/1, little-endian integer)"
+                              "0x38AD":
+                                name: typed_value_string_payload
+                                payload: "string (UTF-8, optional)"
+                              "0x38AE":
+                                name: typed_value_nested_payload
+                                payload: "nested TLV payload blob (variable length)"
+      "0x020A":
+        name: metadata_path_entry
+        payload: "string (commonly 'meta/meta.dat')"
+      "0x020C":
+        name: use_mipmaps_flag
+        payload: "bool (0/1, little-endian integer)"
+      "0x020D":
+        name: section_plane_name_index_seed
+        payload: "u32 compact little-endian integer"
+      "0x020E":
+        name: component_behavior_defaults_block
+        children:
+          "0x1B58":
+            name: component_behavior_block
+            children:
+              "0x1B59":
+                name: behavior_snap_mode
+                payload: "u32 compact little-endian integer"
+              "0x1B5A":
+                name: behavior_no_scale_mask
+                payload: "u32 compact little-endian integer"
+              "0x1B5B":
+                name: behavior_snap_enabled
+                payload: "bool (0/1, little-endian integer)"
+              "0x1B5C":
+                name: behavior_cuts_opening
+                payload: "bool (0/1, little-endian integer)"
+              "0x1B5D":
+                name: behavior_always_face_camera
+                payload: "bool (0/1, little-endian integer)"
+              "0x1B5E":
+                name: behavior_shadows_face_sun
+                payload: "bool (0/1, little-endian integer)"
+      "0x020F":
+        name: default_image_reference_state
+        payload: "u32 compact little-endian integer"
+      "0x0210":
+        name: environment_data_block
+        children:
+          "0x7918":
+            name: environment_data_record
+            children:
+              "0x7919":
+                name: environment_selected_record
+                children:
+                  "0x7B0C":
+                    name: environment_entry
+                    children:
+                      "0x05DC":
+                        name: id_wrapper
+                      "0x7B0D":
+                        name: environment_name
+                        payload: "string (UTF-8, optional)"
+                      "0x7B0E":
+                        name: environment_thumbnail_ref
+                        children:
+                          "0x2134":
+                            name: environment_thumbnail_path
+                            payload: "string (UTF-8, optional)"
+      "0x0213":
+        name: sun_data_block
+        children:
+          "0x7D64":
+            name: sun_data_record
+            payload: "raw bytes (unresolved)"
+      "0x0214":
+        name: face_reversal_migration_done_flag
+        payload: "bool (0/1, little-endian integer)"
+
+materials_xml_schema:
+  root: "mat:material"
+  core_attributes:
+    - name
+    - type
+    - workflow
+    - colorRed
+    - colorGreen
+    - colorBlue
+    - trans
+    - useTrans
+    - hasTexture
+    - colorizeType
+  texture_node: "mat:texture"
+  pbr_node: "mat:pbrMR"
+
+notes:
+  - "Transforms in instance records are encoded as 13 doubles: 3x3 basis + translation + homogeneous scale."
+  - "Observed transform storage order in the 13-double payload is [m00,m10,m20,m01,m11,m21,m02,m12,m22,tx,ty,tz,w]."
+  - "Component instance tag 0x1967 matches definition IDs encoded in 0x157C via 0x07D0 -> 0x05DC -> 0x05DE."
+  - "IDs are commonly encoded as varint-like little-endian payloads, often inside 0x05DC -> 0x05DE."
+  - "Heuristic TLV exploration may surface pseudo-tags (notably 0x0000 and some 0x40xx values) from fixed-size numeric payload bytes."
+  - "Several tags intentionally keep generic field_* naming until their exact semantics are confirmed."

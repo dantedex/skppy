@@ -1,0 +1,89 @@
+# SPDX-License-Identifier: MIT
+"""Finalize legacy materials and layers into the shared model."""
+
+from __future__ import annotations
+
+from ..data_structure.model import Model
+from ..data_structure.layers import LayerFolder
+
+from .parser_types import MaterialState
+from .provenance import ArchiveProvenance
+
+
+def collect_materials(provenance: ArchiveProvenance) -> tuple[MaterialState, ...]:
+    """Collect root-component and directly serialized materials."""
+    materials = list(provenance.root_component_materials)
+    for payload in provenance.root_objects:
+        if isinstance(payload, MaterialState):
+            materials.append(payload)
+        elif isinstance(payload, tuple):
+            materials.extend(value for value in payload if isinstance(value, MaterialState))
+    return tuple(materials)
+
+
+def populate_materials(model: Model, materials: tuple[MaterialState, ...]) -> None:
+    """Append unique shared materials while retaining payload identity."""
+    seen_names = {material.name for material in model.materials}
+    for archived in materials:
+        if archived.material.name in seen_names:
+            continue
+        archived.material.id = model._alloc_id()
+        model.materials.append(archived.material)
+        seen_names.add(archived.material.name)
+
+
+def material_ids_by_archive_index(
+    model: Model,
+    provenance: ArchiveProvenance,
+    material_states: tuple[MaterialState, ...] | None = None,
+) -> dict[int, int]:
+    """Map private archive object indexes to allocated shared material IDs."""
+    materials = material_states if material_states is not None else collect_materials(provenance)
+    material_by_name = {material.name: material for material in model.materials}
+    serialized_indices = [
+        entry.index
+        for entry in provenance.archive_index_entries
+        if entry.kind == "object" and entry.class_name == "CMaterial"
+    ]
+    result: dict[int, int] = {}
+    direct_payload_ids = {id(value) for _, value in provenance.archive_objects if isinstance(value, MaterialState)}
+    for object_index, archived in provenance.archive_objects:
+        if isinstance(archived, MaterialState):
+            material = material_by_name.get(archived.material.name)
+            if material is not None:
+                result[object_index] = material.id
+
+    unresolved = [index for index in serialized_indices if index not in result]
+    recovered = [value for value in materials if id(value) not in direct_payload_ids]
+    for object_index, archived in zip(unresolved, recovered):
+        material = material_by_name.get(archived.material.name)
+        if material is not None:
+            result[object_index] = material.id
+    return result
+
+
+def populate_layers(model: Model, provenance: ArchiveProvenance) -> None:
+    """Append shared layers and resolve the active layer archive reference."""
+    layer_id_by_archive_index: dict[int, int] = {}
+    for archived in provenance.archived_layers:
+        archived.layer.id = model._alloc_id()
+        if archived.material is not None:
+            archived.layer.material = archived.material.material
+        model.layers.append(archived.layer)
+        if archived.object_tag.index is not None:
+            layer_id_by_archive_index[archived.object_tag.index] = archived.layer.id
+    active = provenance.active_layer_tag
+    if active is not None and active.index is not None:
+        model.active_layer_id = layer_id_by_archive_index.get(active.index)
+    for folder in provenance.layer_folders:
+        _resolve_folder_layer_ids(folder, layer_id_by_archive_index)
+        model.layer_folders.append(folder)
+
+
+def _resolve_folder_layer_ids(folder: LayerFolder, layer_id_by_archive_index: dict[int, int]) -> None:
+    """Replace temporary archive indexes with shared model layer IDs."""
+    folder.child_layer_ids = [
+        layer_id_by_archive_index[index] for index in folder.child_layer_ids if index in layer_id_by_archive_index
+    ]
+    for child in folder.child_folders:
+        _resolve_folder_layer_ids(child, layer_id_by_archive_index)

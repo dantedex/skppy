@@ -1,0 +1,193 @@
+name: Publish Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+jobs:
+  build-wheel:
+    name: Build Wheel
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Install build tools
+        run: pip install build
+
+      - name: Build wheel and sdist
+        run: python -m build
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v7
+        with:
+          name: dist
+          path: dist/
+
+  test-wheel:
+    name: Test Wheel
+    needs: build-wheel
+    runs-on: ubuntu-latest
+    steps:
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Download build artifacts
+        uses: actions/download-artifact@v8
+        with:
+          name: dist
+          path: dist/
+
+      - name: Install wheel
+        run: pip install dist/*.whl
+
+      - name: Test import
+        run: |
+          python -c "import skppy; print(skppy.__version__)"
+          python -c "from skppy import load, Model, Material, Layer; print('All imports OK')"
+
+  publish-pypi:
+    name: Publish to PyPI
+    needs: test-wheel
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+    environment:
+      name: pypi
+      url: https://pypi.org/p/skppy
+    steps:
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+
+  build-addon:
+    name: Build Blender Addon
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Install build dependencies
+        run: pip install setuptools-scm
+
+      - name: Build addon package
+        run: python build_blender_addon.py
+
+      - name: Upload addon artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: blender-skp-io-addon
+          path: dist/*.zip
+
+  test-addon:
+    name: Test Addon Artifact
+    needs: build-addon
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Install bundled runtime dependency
+        run: pip install numpy
+
+      - name: Download addon artifact
+        uses: actions/download-artifact@v8
+        with:
+          name: blender-skp-io-addon
+          path: dist/
+
+      - name: Verify packaged manifest and library
+        run: |
+          python - <<'PY'
+          import re
+          import sys
+          import tomllib
+          import zipfile
+          from pathlib import Path
+
+          archives = list(Path("dist").glob("blender_skp_io-*.zip"))
+          if len(archives) != 1:
+              raise SystemExit(f"expected one addon archive, found {archives}")
+          archive = archives[0]
+          with zipfile.ZipFile(archive) as package:
+              manifest = tomllib.loads(package.read("blender_manifest.toml").decode())
+              names = set(package.namelist())
+          required = {
+              "__init__.py",
+              "blender_manifest.toml",
+              "export_builder.py",
+              "operators/export_skp.py",
+              "scene_builder.py",
+              "skppy/__init__.py",
+              "skppy/_version.py",
+          }
+          missing = required - names
+          if missing:
+              raise SystemExit(f"addon archive is missing: {sorted(missing)}")
+          if manifest["id"] != "blender_skp_io":
+              raise SystemExit(f"unexpected addon id: {manifest['id']}")
+
+          sys.path.insert(0, str(archive))
+          import skppy
+
+          manifest_version = re.sub(r"-dev\.(\d+)$", r".dev\1", manifest["version"])
+          if skppy.__version__ != manifest_version:
+              raise SystemExit(
+                  f"version mismatch: skppy={skppy.__version__}, "
+                  f"manifest={manifest['version']}"
+              )
+          print(f"verified {archive}: {skppy.__version__}")
+          PY
+
+  create-release:
+    name: Create GitHub Release
+    needs: [publish-pypi, test-addon]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v8
+        with:
+          path: artifacts/
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v3
+        with:
+          body_path: CHANGELOG.md
+          files: |
+            artifacts/dist/*
+            artifacts/blender-skp-io-addon/*.zip
+          draft: false
+          prerelease: ${{ contains(github.ref, 'alpha') || contains(github.ref, 'beta') || contains(github.ref, 'rc') }}

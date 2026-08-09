@@ -1,0 +1,176 @@
+# Materials and Textures
+
+Guide to reading, creating, and working with materials and their textures. The
+reading snippets assume a `model` returned by `skppy.load()`; creation snippets
+use a model created with `skppy.new_model()`.
+
+---
+
+## Reading materials
+
+The material registry exposes stored color plus normalized PBR values:
+
+```python
+for mat in model.materials:
+    r, g, b, a = mat.color.r, mat.color.g, mat.color.b, mat.color.a
+    print(f"{mat.name!r}")
+    print(f"  RGBA: ({r}, {g}, {b}, {a})")
+    print(f"  alpha:     {mat.alpha:.2f}")
+    print(f"  metallic:  {mat.metallic:.2f}")
+    print(f"  roughness: {mat.roughness:.2f}")
+    print(f"  textured:  {mat.has_texture}")
+```
+
+`mat.color.a` is the stored color-channel alpha, while `mat.alpha` is the
+normalized material opacity used by importers. Faces reference `mat.id`.
+
+---
+
+## Accessing texture data
+
+A texture combines physical tile size, its informational filename, and
+optional encoded image bytes:
+
+```python
+for mat in model.materials:
+    if mat.has_texture and mat.texture:
+        tex = mat.texture
+        print(f"  filename: {tex.filename!r}")
+        print(f"  size:     {tex.x_scale:.1f} x {tex.y_scale:.1f} inches/tile")
+        if tex.data:
+            print(f"  bytes:    {len(tex.data)}")
+```
+
+`x_scale` and `y_scale` represent the **real-world size** of one texture tile
+in inches. A value of `100.0` means one tile spans 100 inches (~= 2.54 m).
+
+## PBR factors
+
+SketchUp's `pbrMR` XML block can provide metallic and roughness factors. skppy
+applies these only when the matching `enable_metalness` or `enable_roughness`
+flag is active; disabled factors fall back to Blender-friendly defaults
+(`metallic=0.0`, `roughness=1.0`).
+
+---
+
+## Saving textures to files
+
+Write retained bytes without decoding them, while sanitizing the resource
+name before joining it to the output directory:
+
+```python
+from pathlib import Path, PureWindowsPath
+
+out = Path("extracted_textures")
+out.mkdir(exist_ok=True)
+
+for mat in model.materials:
+    if mat.has_texture and mat.texture and mat.texture.data:
+        # Discard any serialized source directories before creating a path.
+        safe_name = PureWindowsPath(mat.texture.filename).name or f"material-{mat.id}"
+        dest = out / safe_name
+        dest.write_bytes(mat.texture.data)
+        print(f"Saved {dest}")
+```
+
+Two materials can refer to the same filename. Production extractors should
+decide whether to deduplicate identical bytes or generate unique names.
+
+---
+
+## Creating textured materials in memory
+
+You can attach a `Texture` object to a material in memory and persist it through
+the modern writer:
+
+```python
+from pathlib import Path
+import skppy
+
+# Keep the encoded PNG/JPEG bytes; skppy does not transcode the image.
+texture_bytes = Path("brick.jpg").read_bytes()
+
+brick = model.add_material("Brick", color=skppy.Color(180, 80, 60))
+brick.has_texture = True
+brick.texture = skppy.Texture(
+    filename="brick.jpg",
+    x_scale=100.0,   # 100 inches per tile
+    y_scale=100.0,
+    data=texture_bytes,
+)
+```
+
+The physical scales control tiling independently of pixel dimensions. The
+writer embeds `texture.data`; `filename` is the resource name stored in the
+container.
+
+---
+
+## UV coordinates
+
+UV coordinates are computed per face from the `FaceUVProjection` object. See
+[format/uv_projection.md](../format/uv_projection.md) for the full formula.
+
+Quick summary:
+- UV projection is active only when `face.front_uv` (or `back_uv`) is not `None`.
+- Without a projection, `skppy` falls back to planar UV tiling.
+- UV values are computed in local space (SketchUp inches), then divided by
+  `texture.x_scale` / `texture.y_scale` to normalise.
+
+```python
+def front_uv(face, vertex, material):
+    """Return one local-space front UV, or None for an untextured face."""
+    projection = face.front_uv
+    texture = material.texture
+    if projection is None or texture is None:
+        return None
+    return projection.compute_uv(
+        px=vertex.position.x,
+        py=vertex.position.y,
+        pz=vertex.position.z,
+        x_scale=texture.x_scale,
+        y_scale=texture.y_scale,
+        normal=face.normal().to_tuple(),
+    )
+```
+
+The vertex must come from the same definition-local scope as the face. Do not
+apply an instance transform before computing stored UV projections.
+
+---
+
+## Transparent materials
+
+In SketchUp, `alpha < 1.0` means the material is semi-transparent. In Blender
+the addon sets:
+
+- `Blender 4.2+`: `material.surface_render_method = "DITHERED"`
+- Older Blender: `material.blend_method = "HASHED"` when supported, otherwise
+  `BLEND`
+
+When a diffuse texture's alpha channel contains transparent pixels, the Blender
+addon connects the image texture's `Alpha` output to the Principled BSDF
+`Alpha` input and enables the same transparent material mode.
+
+---
+
+## Material inheritance
+
+A face with `front_material_id = None` inherits the material of its parent
+component instance. Use `Entities.prepare_mesh()` to resolve this:
+
+```python
+lookup = {m.id: m for m in model.materials}
+mesh = defn.entities.prepare_mesh(
+    name="my_instance",
+    material_lookup=lookup,
+    inherited_material_id=instance.material_id,  # may be None
+)
+
+for face in mesh.faces:
+    # None means neither the face nor the parent instance has a material.
+    print(face.material_name or "default material")
+```
+
+Pass the parent instance's effective material ID at each nesting level. The
+method resolves both material names and the texture scale needed for UVs.

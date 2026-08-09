@@ -1,0 +1,96 @@
+name: Blender Addon
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  build-addon:
+    name: Build Blender Addon
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Install build dependencies
+        run: pip install setuptools-scm
+
+      - name: Build addon package
+        run: python build_blender_addon.py
+
+      - name: Upload addon artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: blender-skp-io-addon
+          path: dist/*.zip
+
+  test-io:
+    name: Test Blender ${{ matrix.blender-version }} IO
+    needs: build-addon
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - blender-version: "4.2.22"
+            release: Blender4.2
+            archive: blender-4.2.22-linux-x64.tar.xz
+            directory: blender-4.2.22-linux-x64
+          - blender-version: "4.5.11"
+            release: Blender4.5
+            archive: blender-4.5.11-linux-x64.tar.xz
+            directory: blender-4.5.11-linux-x64
+          - blender-version: "5.2.0"
+            release: Blender5.2
+            archive: blender-5.2.0-linux-x64.tar.xz
+            directory: blender-5.2.0-linux-x64
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Download addon artifact
+        uses: actions/download-artifact@v8
+        with:
+          name: blender-skp-io-addon
+          path: /tmp/addon/
+
+      - name: Cache Blender ${{ matrix.blender-version }}
+        id: blender-cache
+        uses: actions/cache@v5
+        with:
+          path: ${{ runner.temp }}/${{ matrix.directory }}
+          key: blender-${{ runner.os }}-${{ matrix.archive }}
+
+      - name: Download official Blender ${{ matrix.blender-version }}
+        if: steps.blender-cache.outputs.cache-hit != 'true'
+        run: |
+          curl --fail --location --retry 3 \
+            --output "${RUNNER_TEMP}/${{ matrix.archive }}" \
+            "https://download.blender.org/release/${{ matrix.release }}/${{ matrix.archive }}"
+          tar -xf "${RUNNER_TEMP}/${{ matrix.archive }}" -C "${RUNNER_TEMP}"
+
+      - name: Configure Blender executable
+        run: |
+          test -x "${RUNNER_TEMP}/${{ matrix.directory }}/blender"
+          echo "BLENDER_BIN=${RUNNER_TEMP}/${{ matrix.directory }}/blender" >> "${GITHUB_ENV}"
+
+      - name: Run isolated addon integration
+        run: |
+          addon_archive=$(find /tmp/addon -maxdepth 1 -name '*.zip' -print -quit)
+          test -n "${addon_archive}"
+          BLENDER_USER_RESOURCES=$(mktemp -d)
+          export BLENDER_USER_RESOURCES
+          "${BLENDER_BIN}" --background -noaudio --factory-startup \
+            --python-exit-code 1 \
+            --python tests/blender/run_integration.py -- \
+            --addon "${addon_archive}"

@@ -1,0 +1,77 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyd
+skppy/_version.py
+.Python
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Sphinx build output
+docs/_build/
+docs/api/generated/
+_build
+
+# Test / lint caches
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.tox/
+htmlcov/
+.coverage
+.coverage.*
+coverage.xml
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# Rust / Cargo
+target/
+
+# C / C++ build artifacts
+*.o
+*.a
+*.so
+*.slo
+*.lo
+*.obj
+*.exe
+*.dll
+*.lib
+*.out
+*.app
+build/
+
+# Cython generated files (keep sources, ignore compiled output)
+*.so
+*.html
+
+# IDE / editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Generated example outputs
+example/conformance/
+example/my_cube_output.skp
+example/*.dump/
+*.dae

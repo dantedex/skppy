@@ -1,0 +1,68 @@
+[build-system]
+requires = ["setuptools>=61", "setuptools-scm>=8", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "skppy"
+dynamic = ["version"]
+description = "Python toolkit for reading and writing SketchUp .skp files"
+readme = "README.md"
+license = "MIT"
+authors = [
+    { name = "Dante Dex", email = "dante.dex.arch@gmail.com" },
+]
+maintainers = [
+    { name = "Dante Dex", email = "dante.dex.arch@gmail.com" },
+]
+requires-python = ">=3.10"
+dependencies = [
+    "numpy>=1.24",
+]
+keywords = ["sketchup", "skp", "3d", "geometry"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3",
+    "Topic :: Multimedia :: Graphics :: 3D Modeling",
+]
+
+[project.urls]
+Homepage = "https://github.com/dantedex/skppy"
+Documentation = "https://dantedex.github.io/skppy/"
+Repository = "https://github.com/dantedex/skppy.git"
+Issues = "https://github.com/dantedex/skppy/issues"
+
+[project.optional-dependencies]
+dev = [
+    "bandit>=1.7",
+    "mypy>=1.8",
+    "pre-commit>=3.6",
+    "pydocstyle>=6.3",
+    "pytest>=7",
+    "pytest-cov",
+    "ruff>=0.8",
+    "sphinx>=7.2",
+    "myst-parser>=2.0",
+    "furo>=2023.9.10",
+    "sphinx-autodoc-typehints>=1.25",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["skppy*"]
+
+[tool.setuptools_scm]
+version_file = "skppy/_version.py"
+fallback_version = "0.0.0"
+local_scheme = "no-local-version"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.mypy]
+ignore_missing_imports = true
+strict = true
+
+[tool.pydocstyle]
+select = ["D100", "D101", "D102", "D103", "D104", "D106"]
+match = "(?!_version).*\\.py"

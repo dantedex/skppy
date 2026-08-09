@@ -1,0 +1,106 @@
+# Changelog
+
+Notable user-facing changes are recorded here. Versions follow Git tags and
+the project uses semantic versioning while the public API remains pre-1.0.
+
+## Unreleased
+
+### Changed
+
+- Legacy-format documentation is organized as a concise overview plus focused
+  container, class-schema, and field-layout references.
+- Agent notes contain only durable public development guidance instead of
+  historical session logs or machine-specific procedures.
+- Documentation examples are executed by a strict Sphinx doctest gate in local
+  builds and CI.
+
+### Fixed
+
+- Blender collection instances preserve source parent transforms and instance
+  offsets, deduplicate multi-linked objects, and serialize child definitions
+  before their containers so official readers recognize the complete asset in
+  modern and SketchUp Make 2017 exports.
+- Blender mesh export marks an edge soft and smooth only when exactly two
+  smooth-shaded faces share a non-sharp edge. Boundary, non-manifold, explicit
+  sharp, and smooth/flat-transition edges now remain hard.
+
+## 0.8.0 - 2026-07-19
+
+### Added
+
+- Complete modern writer coverage for geometry, materials/PBR/textures, UVs,
+  layers/folders, components/groups/images, annotations, cameras/scenes,
+  environments, styles, watermarks, match-photo images, options, axes,
+  rendering/shadow state, and typed attribute dictionaries.
+- Blender `export_scene.skp` operator and File > Export UI with object scope,
+  unit conversion, evaluated modifiers, reusable mesh definitions, collection
+  instances, PBR/textures/UVs, tags, camera-marker scenes, text annotations,
+  and scalar custom properties.
+- Independent Python-to-C conformance catalog with 59 writer fixtures plus a
+  Blender-generated export validated through the public SketchUp SDK.
+
+### Changed
+
+- Writer unit tests compare generated data with independent raw bytes rather
+  than using the parser as a round-trip oracle.
+- The addon manifest and legacy `bl_info` now advertise bidirectional SKP IO.
+
+### Fixed
+
+- Modern annotations without an explicit font now reference the required
+  default font, preventing official-reader error 12.
+- Annotation entity associations, nested instance paths, shadow state, font
+  objects, scene snapshots, multiple environments, and graph identity checks
+  are preserved during writing.
+
+## 0.7.0 - 2026-07-16
+
+### Added
+
+- Automatic, version-aware loading of SU3-SU2020 CArchive and SU2021 ZIP/TLV
+  containers into one shared public model.
+- Shared representations for text, dimensions, page backgrounds, relationship
+  IDs, attribute ownership, rendering options, and layer display materials.
+- Blender import for layer collections, construction geometry, annotations,
+  saved scene cameras, PBR factors, UV projections, and edge shading, with
+  responsive progress and cooperative cancellation.
+- Generated compatibility validation for all 15 save targets, deterministic
+  binary mutation coverage, and CI for Python 3.10-3.14 and Blender LTS/current.
+
+### Changed
+
+- Legacy and modern parsers now populate the same data structures directly;
+  archive-only state is limited to provenance and unresolved wire identities.
+- Parser, mesh-preparation, scene-graph, triangulation, and Blender construction
+  phases are split into focused modules with enforced complexity thresholds.
+- Dense parsing uses indexed TLV/archive lookups and linear child tracking.
+- Modern saved scenes preserve persistent IDs, cameras, repeated references,
+  and version-aware metadata defaults.
+
+### Fixed
+
+- Legacy and modern projected, positioned, mirrored, inherited, and two-sided
+  UV mappings now follow SketchUp's observed material-side semantics.
+- Material opacity respects its enable flag; image alpha, PBR factors, and
+  dithered transparency are connected correctly in Blender.
+- Modern inline layer materials, layer-folder membership, shadow country, scene
+  identity, and section-display flags are preserved.
+- Polygon reconstruction and triangulation reduce narrow triangles and preserve
+  the minimum practical n-gon count, including faces with multiple holes.
+- Invalid containers consistently raise `InvalidSkpError` while preserving the
+  low-level cause; unsupported legacy schemas remain explicit.
+- Metadata classification no longer truncates ordinary contributor names.
+
+## 0.6.0 - 2026-06-30
+
+### Added
+
+- NumPy-backed vectors, transforms, UV calculations, and image alpha checks.
+- Blender edge smoothing and sharp-edge import controls.
+- Single-hole n-gon reconstruction and improved triangulation quality.
+
+### Changed
+
+- Parser logic and shared data structures were separated into dedicated
+  modules without compatibility shims.
+- Project documentation and quality checks became part of the release baseline.
