@@ -98,3 +98,66 @@ jobs:
       - name: Run public conformance-suite Python tests
         working-directory: skppy_tests
         run: python -m pytest -q
+
+  sdk-conformance:
+    name: skppy-tests public SDK conformance
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out skppy
+        uses: actions/checkout@v6
+        with:
+          path: skppy
+          fetch-depth: 0
+
+      - name: Check out skppy-tests
+        uses: actions/checkout@v6
+        with:
+          repository: dantedex/skppy-tests
+          path: skppy_tests
+          # Fine-grained PAT with Contents: Read when the suite is private.
+          token: ${{ secrets.SKPPY_TESTS_TOKEN || github.token }}
+          persist-credentials: false
+
+      - name: Set up Python 3.14
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.14"
+          cache: pip
+          cache-dependency-path: skppy/pyproject.toml
+
+      - name: Install skppy and test dependencies
+        run: pip install -e ./skppy pytest
+
+      - name: Install public SDK test toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends gcc-mingw-w64-x86-64 wine
+
+      - name: Generate and validate current parser fixtures
+        working-directory: skppy_tests
+        run: |
+          make generate OUTPUT_DIR="${RUNNER_TEMP}/skppy-tests-current"
+          OUTPUT_DIR="${RUNNER_TEMP}/skppy-tests-current" python run_tests.py
+
+      - name: Validate every supported public save target
+        working-directory: skppy_tests
+        run: >-
+          make release-matrix
+          SKPPY_PATH="${GITHUB_WORKSPACE}/skppy"
+          OUTPUT_DIR="${RUNNER_TEMP}/skppy-tests-matrix"
+          MATRIX_JOBS=4
+
+      - name: Validate modern writer output through the public SDK
+        working-directory: skppy_tests
+        run: >-
+          make writer-validation
+          SKPPY_PATH="${GITHUB_WORKSPACE}/skppy"
+          OUTPUT_DIR="${RUNNER_TEMP}/skppy-tests-writer"
+
+      - name: Validate SketchUp Make 2017 writer output through the public SDK
+        working-directory: skppy_tests
+        run: >-
+          make legacy-writer-validation
+          SKPPY_PATH="${GITHUB_WORKSPACE}/skppy"
+          OUTPUT_DIR="${RUNNER_TEMP}/skppy-tests-legacy-writer"
