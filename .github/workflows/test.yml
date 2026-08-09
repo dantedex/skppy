@@ -101,7 +101,7 @@ jobs:
 
   sdk-conformance:
     name: skppy-tests public SDK conformance
-    runs-on: ubuntu-latest
+    runs-on: windows-latest
 
     steps:
       - name: Check out skppy
@@ -130,34 +130,48 @@ jobs:
         run: pip install -e ./skppy pytest
 
       - name: Install public SDK test toolchain
-        run: |
-          sudo apt-get update
-          sudo apt-get install --yes --no-install-recommends gcc-mingw-w64-x86-64 wine
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          update: true
+          install: >-
+            mingw-w64-x86_64-gcc
+            make
 
       - name: Generate and validate current parser fixtures
         working-directory: skppy_tests
+        shell: msys2 {0}
         run: |
-          make generate OUTPUT_DIR="${RUNNER_TEMP}/skppy-tests-current"
-          OUTPUT_DIR="${RUNNER_TEMP}/skppy-tests-current" python run_tests.py
+          temp_root="$(cygpath -u "$RUNNER_TEMP")"
+          output_dir="$temp_root/skppy-tests-current"
+          make generate CC=gcc RUNNER= NATIVE_RUNNER=1 \
+            OUTPUT_DIR="$output_dir"
+          OUTPUT_DIR="$(cygpath -w "$output_dir")" python run_tests.py
 
       - name: Validate every supported public save target
         working-directory: skppy_tests
+        shell: msys2 {0}
         run: >-
-          make release-matrix
-          SKPPY_PATH="${GITHUB_WORKSPACE}/skppy"
-          OUTPUT_DIR="${RUNNER_TEMP}/skppy-tests-matrix"
+          make release-matrix CC=gcc RUNNER= NATIVE_RUNNER=1
+          PATH_CONVERTER="cygpath -w"
+          SKPPY_PATH="$(cygpath -u "$GITHUB_WORKSPACE")/skppy"
+          OUTPUT_DIR="$(cygpath -u "$RUNNER_TEMP")/skppy-tests-matrix"
           MATRIX_JOBS=4
 
       - name: Validate modern writer output through the public SDK
         working-directory: skppy_tests
+        shell: msys2 {0}
         run: >-
-          make writer-validation
-          SKPPY_PATH="${GITHUB_WORKSPACE}/skppy"
-          OUTPUT_DIR="${RUNNER_TEMP}/skppy-tests-writer"
+          make writer-validation CC=gcc RUNNER=
+          PATH_CONVERTER="cygpath -w"
+          SKPPY_PATH="$(cygpath -u "$GITHUB_WORKSPACE")/skppy"
+          OUTPUT_DIR="$(cygpath -u "$RUNNER_TEMP")/skppy-tests-writer"
 
       - name: Validate SketchUp Make 2017 writer output through the public SDK
         working-directory: skppy_tests
+        shell: msys2 {0}
         run: >-
-          make legacy-writer-validation
-          SKPPY_PATH="${GITHUB_WORKSPACE}/skppy"
-          OUTPUT_DIR="${RUNNER_TEMP}/skppy-tests-legacy-writer"
+          make legacy-writer-validation CC=gcc RUNNER=
+          PATH_CONVERTER="cygpath -w"
+          SKPPY_PATH="$(cygpath -u "$GITHUB_WORKSPACE")/skppy"
+          OUTPUT_DIR="$(cygpath -u "$RUNNER_TEMP")/skppy-tests-legacy-writer"
