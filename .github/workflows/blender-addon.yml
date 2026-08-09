@@ -91,4 +91,26 @@ jobs:
           "${BLENDER_BIN}" --background -noaudio --factory-startup \
             --python-exit-code 1 \
             --python tests/blender/run_integration.py -- \
-            --addon "${addon_archive}"
+            --addon "${addon_archive}" \
+            --export-output "${RUNNER_TEMP}/blender-export/blender_export.skp"
+
+      - name: Check out skppy-tests
+        uses: actions/checkout@v6
+        with:
+          repository: dantedex/skppy-tests
+          path: skppy_tests
+          # Fine-grained PAT with Contents: Read when the suite is private.
+          token: ${{ secrets.SKPPY_TESTS_TOKEN || github.token }}
+          persist-credentials: false
+
+      - name: Install public SDK validator toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends gcc-mingw-w64-x86-64 wine
+
+      - name: Validate Blender export through the public SDK
+        working-directory: skppy_tests
+        run: >-
+          make blender-validation
+          BLENDER_EXPORT_DIR="${RUNNER_TEMP}/blender-export"
+          OUTPUT_DIR="${RUNNER_TEMP}/skppy-tests-blender-${{ matrix.blender-version }}"
