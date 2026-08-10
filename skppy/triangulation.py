@@ -36,14 +36,11 @@ Self-touching outer polygon
     point twice (e.g. a wall with a rectangular notch where the boundary
     doubles back).  In 2-D projection this creates a polygon where
     v[i] == v[j] for i != j.  Standard ear-clipping can stall because no
-    strictly-convex ear exists at the touching vertices.  When the ear-clip
-    loop fails to make progress it falls back to a **fan triangulation** from
-    verts[0].  The fan triangles inside the self-touching notch are CW (wrong
-    winding relative to the face normal) and cancel each other when computing
-    signed area, which correctly reproduces the actual polygon area.  From
-    Blender's perspective the CW triangles appear as back-faces in the notch
-    region, which is the geometrically correct result for a self-intersecting
-    boundary.
+    strictly-convex ear exists at the touching vertices. When the ear-clip
+    loop fails to make progress, repeated bridge vertices split its remainder
+    into cycles. Counter-clockwise filled cycles are triangulated recursively;
+    clockwise hole cycles are discarded so overlapping triangles cannot cover
+    an opening in Blender.
 
 Bridge-duplicate vertices (multiple holes sharing an outer vertex)
     After merging the first hole the merged polygon contains the chosen outer
@@ -160,9 +157,16 @@ def triangulate_face_3d(
         for start, hp in zip(hole_starts, holes):
             hole_id_lists.append(list(range(start, start + len(hp))))
 
-    # - 2. Merge holes into a simple polygon -----
+    # - 2. Split multiple holes into simple polygons when possible -----
+    if len(hole_id_lists) > 1:
+        polygons = _split_holes_into_simple_polygons(outer_ids, hole_id_lists, pts2d)
+        if polygons is not None:
+            triangles = [triangle for polygon in polygons for triangle in _ear_clip(polygon, pts2d)]
+            return _nondegenerate_triangles(triangles, pts2d)
+
+    # - 3. Merge remaining holes into a weakly simple polygon -----
     merged = _merge_holes(outer_ids, hole_id_lists, pts2d)
-    # - 3. Ear-clip the simple merged polygon ------
+    # - 4. Ear-clip the merged polygon ------
     return _ear_clip(merged, pts2d)
 
 
@@ -504,10 +508,11 @@ def _find_split_bridge_pair(
     outer: List[int],
     hole: List[int],
     pts: List[Tuple[float, float]],
+    obstacle_loops: Optional[List[List[int]]] = None,
 ) -> Optional[Tuple[int, int, int, int]]:
     """Return two visible bridge pairs for splitting one hole into two faces."""
     candidates: List[Tuple[int, int, float]] = []
-    loops = [outer, hole]
+    loops = [outer, hole, *(obstacle_loops or [])]
     for outer_pos, outer_idx in enumerate(outer):
         for hole_pos, hole_idx in enumerate(hole):
             if _bridge_visible_between_loops(outer_idx, hole_idx, loops, pts):
@@ -550,6 +555,41 @@ def _find_split_bridge_pair(
                 best_pair = (outer_a, hole_a, outer_b, hole_b)
 
     return best_pair
+
+
+def _split_holes_into_simple_polygons(
+    outer: List[int],
+    holes: List[List[int]],
+    pts: List[Tuple[float, float]],
+) -> Optional[List[List[int]]]:
+    """Remove several holes by splitting their containing polygon twice."""
+    polygons = [list(outer)]
+    for hole_index, hole in enumerate(holes):
+        polygon_index = next(
+            (index for index, polygon in enumerate(polygons) if _point_in_polygon(pts[hole[0]], polygon, pts)),
+            None,
+        )
+        if polygon_index is None:
+            return None
+
+        polygon = polygons.pop(polygon_index)
+        bridge_pair = _find_split_bridge_pair(polygon, hole, pts, holes[hole_index + 1 :])
+        if bridge_pair is None:
+            return None
+
+        outer_a, hole_a, outer_b, hole_b = bridge_pair
+        split_polygons = [
+            _loop_arc(polygon, outer_a, outer_b) + _loop_arc(hole, hole_b, hole_a),
+            _loop_arc(polygon, outer_b, outer_a) + _loop_arc(hole, hole_a, hole_b),
+        ]
+        for split_polygon in split_polygons:
+            area = _signed_polygon_area2([pts[index] for index in split_polygon])
+            if abs(area) < _PROJECTED_AREA_EPSILON:
+                return None
+            if area < 0.0:
+                split_polygon.reverse()
+        polygons[polygon_index:polygon_index] = split_polygons
+    return polygons
 
 
 def _bridge_visible_between_loops(
@@ -932,6 +972,47 @@ def _fan_triangles(vertices: List[int]) -> List[Tuple[int, int, int]]:
     return [(vertices[0], vertices[index], vertices[index + 1]) for index in range(1, len(vertices) - 1)]
 
 
+def _nondegenerate_triangles(
+    triangles: List[Tuple[int, int, int]],
+    pts: List[Tuple[float, float]],
+) -> List[Tuple[int, int, int]]:
+    """Remove zero-area triangles introduced by collinear generated cuts."""
+    return [
+        triangle
+        for triangle in triangles
+        if abs(_signed_polygon_area2([pts[index] for index in triangle])) > _PROJECTED_AREA_EPSILON
+    ]
+
+
+def _split_repeated_vertex_cycle(vertices: List[int]) -> tuple[List[int], List[int]] | None:
+    """Split a self-touching loop into two cycles at its first repeated vertex."""
+    first_positions: dict[int, int] = {}
+    for current, vertex in enumerate(vertices):
+        first = first_positions.get(vertex)
+        if first is None:
+            first_positions[vertex] = current
+            continue
+
+        inside = vertices[first:current]
+        outside = vertices[current:] + vertices[:first]
+        if len(inside) >= 3 and len(outside) >= 3:
+            return inside, outside
+    return None
+
+
+def _triangulate_positive_cycles(vertices: List[int], pts: List[Tuple[float, float]]) -> List[Tuple[int, int, int]]:
+    """Triangulate filled cycles and discard clockwise hole cycles in a bridged remainder."""
+    split = _split_repeated_vertex_cycle(vertices)
+    if split is None:
+        return _fan_triangles(vertices)
+
+    triangles: List[Tuple[int, int, int]] = []
+    for cycle in split:
+        if _signed_polygon_area2([pts[index] for index in cycle]) > _PROJECTED_AREA_EPSILON:
+            triangles.extend(_ear_clip(cycle, pts))
+    return triangles
+
+
 def _ear_clip(
     poly: List[int],
     pts: List[Tuple[float, float]],
@@ -963,8 +1044,9 @@ def _ear_clip(
     while len(verts) > 3:
         best_ear = _best_ear(verts, pts) if len(verts) <= _MAX_QUALITY_GUIDED_EAR_VERTICES else _first_ear(verts, pts)
         if best_ear is None:
-            # No ear found - polygon may be degenerate; fallback to fan.
-            triangles.extend(_fan_triangles(verts))
+            # A bridged multi-hole loop can retain self-touching sub-cycles after
+            # valid ears are clipped. Keep only its counter-clockwise filled cycles.
+            triangles.extend(_triangulate_positive_cycles(verts, pts))
             break
 
         prev_pos, curr_pos, next_pos = best_ear

@@ -122,6 +122,24 @@ def test_multiple_hole_triangulation_preserves_topology_and_area():
         assert not (6.0 < centroid[0] < 8.0 and 3.0 < centroid[1] < 6.0)
 
 
+def test_four_aligned_holes_do_not_leave_overlapping_fallback_triangles():
+    """Cover the bridged-loop remainder found in walls with several openings."""
+    outer = [(0.0, 0.0, 0.0), (20.0, 0.0, 0.0), (20.0, 10.0, 0.0), (0.0, 10.0, 0.0)]
+    holes = [[(x, 2.0, 0.0), (x, 4.0, 0.0), (x + 2.0, 4.0, 0.0), (x + 2.0, 2.0, 0.0)] for x in (2.0, 6.0, 10.0, 14.0)]
+    points = outer + [point for hole in holes for point in hole]
+
+    triangles = triangulate_face_3d(outer, holes, normal=(0.0, 0.0, 1.0))
+
+    areas = [_triangle_signed_area(points, triangle) for triangle in triangles]
+    assert triangles
+    assert all(area > 0.0 for area in areas)
+    assert sum(areas) == pytest.approx(184.0)
+    assert sum(abs(area) for area in areas) == pytest.approx(184.0)
+    for triangle in triangles:
+        centroid = tuple(sum(points[index][axis] for index in triangle) / 3.0 for axis in range(2))
+        assert not any(x < centroid[0] < x + 2.0 and 2.0 < centroid[1] < 4.0 for x in (2.0, 6.0, 10.0, 14.0))
+
+
 @pytest.mark.parametrize("scale", [1e-3, 1.0, 1e3])
 def test_hole_triangulation_is_stable_across_model_scales(scale):
     """Keep topology and relative area stable for practical inch scales."""

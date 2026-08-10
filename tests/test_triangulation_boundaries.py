@@ -59,6 +59,33 @@ def test_split_single_hole_normalizes_polygon_winding(monkeypatch):
     assert polygons[0][0] == 4
 
 
+def test_multi_hole_split_falls_back_for_uncontained_or_unsplittable_holes(monkeypatch):
+    points = triangulation._project_to_2d(SQUARE_3D + HOLE_3D, (0.0, 0.0, 1.0))
+    outer = list(range(4))
+    hole = list(range(4, 8))
+    monkeypatch.setattr(triangulation, "_point_in_polygon", lambda *_args: False)
+    assert triangulation._split_holes_into_simple_polygons(outer, [hole], points) is None
+
+    monkeypatch.setattr(triangulation, "_point_in_polygon", lambda *_args: True)
+    monkeypatch.setattr(triangulation, "_find_split_bridge_pair", lambda *_args: None)
+    assert triangulation._split_holes_into_simple_polygons(outer, [hole], points) is None
+
+
+def test_multi_hole_split_rejects_zero_area_and_normalizes_winding(monkeypatch):
+    points = triangulation._project_to_2d(SQUARE_3D + HOLE_3D, (0.0, 0.0, 1.0))
+    outer = list(range(4))
+    hole = list(range(4, 8))
+    monkeypatch.setattr(triangulation, "_point_in_polygon", lambda *_args: True)
+    monkeypatch.setattr(triangulation, "_find_split_bridge_pair", lambda *_args: (0, 0, 2, 2))
+    monkeypatch.setattr(triangulation, "_signed_polygon_area2", lambda _points: 0.0)
+    assert triangulation._split_holes_into_simple_polygons(outer, [hole], points) is None
+
+    monkeypatch.setattr(triangulation, "_signed_polygon_area2", lambda _points: -1.0)
+    polygons = triangulation._split_holes_into_simple_polygons(outer, [hole], points)
+    assert polygons is not None
+    assert polygons[0][0] == 4
+
+
 def test_triangle_group_helpers_retain_invalid_groups(monkeypatch):
     triangles = [(0, 1, 2)]
     points = [(0.0, 0.0), (1.0, 0.0), (0.0, 1.0)]
@@ -135,6 +162,24 @@ def test_best_visible_bridge_prefers_less_reused_candidate(monkeypatch):
     assert triangulation._best_visible_bridge_target(0, [1, 2], points, 0, True, Counter({1: 2, 2: 1})) == 1
 
 
+def test_bridge_helpers_cover_occluded_candidates_and_vertical_tangents(monkeypatch):
+    points = [(2.0, 0.0), (3.0, 1.0), (4.0, 0.0)]
+    monkeypatch.setattr(triangulation, "_segment_visible", lambda *_args: False)
+    assert triangulation._best_visible_bridge_target(0, [1, 2], points, 0, False, Counter({1: 1, 2: 1})) == 0
+
+    monkeypatch.setattr(triangulation, "_ray_bridge_target", lambda *_args: 0)
+    monkeypatch.setattr(triangulation, "_best_visible_bridge_target", lambda *_args: 1)
+    assert triangulation._find_bridge_target(0, [1, 2], points) == 1
+    assert triangulation._polar_tan(0.0, 0.0, (0.0, 1.0)) == float("inf")
+    assert triangulation._polar_tan(0.0, 0.0, (0.0, -1.0)) == float("-inf")
+
+
+def test_segment_visibility_rejects_crossing_unrelated_edge(monkeypatch):
+    points = [(0.0, 0.0), (2.0, 0.0), (2.0, 2.0), (0.0, 2.0), (1.0, 1.0)]
+    monkeypatch.setattr(triangulation, "_segments_intersect", lambda *_args: True)
+    assert not triangulation._segment_visible(4, 0, [0, 1, 2, 3], points)
+
+
 def test_ear_helpers_cover_short_triangle_fan_and_degenerate_quality():
     points = [(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)]
     assert triangulation._fan_triangles([0, 1, 2, 3]) == [(0, 1, 2), (0, 2, 3)]
@@ -145,6 +190,16 @@ def test_ear_helpers_cover_short_triangle_fan_and_degenerate_quality():
         (3, 1, 0),
     ]
     assert triangulation._triangle_shape_quality((0.0, 0.0), (0.0, 0.0), (0.0, 0.0)) == 0.0
+
+
+def test_repeated_vertex_cycle_helpers_keep_plain_fallback_and_reject_short_split():
+    points = [(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)]
+    assert triangulation._split_repeated_vertex_cycle([0, 1, 0, 2]) is None
+    assert triangulation._triangulate_positive_cycles([0, 1, 2, 3], points) == [(0, 1, 2), (0, 2, 3)]
+
+    bridged_points = [(0.0, 0.0), (1.0, 0.0), (0.0, 1.0), (0.0, 1.0), (1.0, 0.0)]
+    assert triangulation._split_repeated_vertex_cycle([0, 1, 2, 0, 3, 4]) == ([0, 1, 2], [0, 3, 4])
+    assert triangulation._triangulate_positive_cycles([0, 1, 2, 0, 3, 4], bridged_points) == [(0, 1, 2)]
 
 
 def test_large_polygon_uses_first_valid_ear(monkeypatch):
