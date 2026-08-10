@@ -3,7 +3,7 @@ BLENDER ?= blender
 BLENDER_FIXTURE ?=
 BLENDER_EXPORT_OUTPUT ?=
 
-.PHONY: coverage docs doctest docs-clean test test-blender quality docstrings
+.PHONY: coverage docs docs-versioned doctest docs-clean test test-blender quality docstrings
 
 coverage:
 	$(PYTHON) -m pytest --cov=skppy --cov-report=term-missing --cov-fail-under=100
@@ -11,6 +11,10 @@ coverage:
 docs:
 	rm -rf docs/api/generated
 	$(PYTHON) -m sphinx -b html -W --keep-going docs docs/_build/html
+
+docs-versioned:
+	rm -rf docs/api/generated docs/_build/html
+	$(PYTHON) docs/build_versioned.py docs/_build/html
 
 doctest:
 	rm -rf docs/_build/doctest

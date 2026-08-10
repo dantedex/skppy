@@ -1,0 +1,23 @@
+/* SPDX-License-Identifier: MIT */
+
+.version-switcher {
+  border-bottom: 1px solid var(--color-sidebar-item-background--hover);
+  margin: 0.75rem 0;
+  padding: 0 1rem 1rem;
+}
+
+.version-switcher label {
+  display: block;
+  font-size: 0.8rem;
+  font-weight: 600;
+  margin-bottom: 0.35rem;
+}
+
+.version-switcher select {
+  background: var(--color-background-primary);
+  border: 1px solid var(--color-foreground-border);
+  border-radius: 0.25rem;
+  color: var(--color-foreground-primary);
+  padding: 0.35rem;
+  width: 100%;
+}

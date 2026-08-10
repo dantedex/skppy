@@ -2,11 +2,16 @@
 """Sphinx configuration for skppy documentation."""
 
 import doctest
+import json
 import os
+from pathlib import Path
+import posixpath
 import sys
 
-# Make skppy importable for autodoc (docs/ is one level below the repo root)
-sys.path.insert(0, os.path.abspath(".."))
+# Make the selected source version importable for autodoc. The versioned build
+# points this at each extracted Git tag in turn.
+package_root = os.environ.get("SKPPY_DOC_PACKAGE_ROOT", str(Path(__file__).resolve().parents[1]))
+sys.path.insert(0, package_root)
 
 # -
 # Project metadata
@@ -17,9 +22,9 @@ author = "Dante Dex"
 try:
     import skppy
 
-    release = skppy.__version__
+    release = os.environ.get("SKPPY_DOC_RELEASE", skppy.__version__)
 except Exception:
-    release = "0+unknown"
+    release = os.environ.get("SKPPY_DOC_RELEASE", "0+unknown")
 
 # -
 # Extensions
@@ -87,4 +92,40 @@ exclude_patterns = [
 # -
 html_theme = "furo"
 html_static_path = ["_static"]
+html_css_files = ["versioning.css"]
 html_title = "skppy"
+html_sidebars = {
+    "**": [
+        "sidebar/brand.html",
+        "versioning.jinja",
+        "sidebar/search.html",
+        "sidebar/scroll-start.html",
+        "sidebar/navigation.html",
+        "sidebar/scroll-end.html",
+        "sidebar/variant-selector.html",
+    ],
+}
+
+
+def _add_version_context(app, pagename, templatename, context, doctree):
+    """Add the manually built documentation versions to HTML templates."""
+    del app, templatename, doctree
+    serialized_versions = os.environ.get("SKPPY_DOC_VERSIONS")
+    current_path = os.environ.get("SKPPY_DOC_CURRENT")
+    if not serialized_versions or not current_path:
+        return
+
+    current_directory = posixpath.dirname(posixpath.join(current_path, pagename))
+    versions = json.loads(serialized_versions)
+    for item in versions:
+        target_page = pagename if pagename in item["documents"] else "index"
+        target = posixpath.join(item["path"], f"{target_page}.html")
+        item["url"] = posixpath.relpath(target, current_directory)
+        item["current"] = item["path"] == current_path
+    context["documentation_versions"] = versions
+
+
+def setup(app):
+    """Register the version selector context hook."""
+    app.connect("html-page-context", _add_version_context)
+    return {"parallel_read_safe": True, "parallel_write_safe": True}

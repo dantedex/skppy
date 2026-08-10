@@ -21,6 +21,18 @@ addon for importing and exporting `.skp` files. The addon converts geometry,
 reusable components, collection instances, materials/textures, UVs, tags,
 cameras/scenes, text annotations, and scalar custom properties.
 
+## Documentation
+
+The complete documentation is published at
+[dantedex.github.io/skppy](https://dantedex.github.io/skppy/). Use
+[latest](https://dantedex.github.io/skppy/latest/) for the current development
+documentation or select a stable release such as
+[0.9.0](https://dantedex.github.io/skppy/0.9.0/) from the version menu.
+
+Documentation sources live in [`docs/`](docs/). Build the current sources with
+`make docs`, or build all documented releases and `main` with
+`make docs-versioned`.
+
 ## Features
 
 - **Read** ZIP/VFF `.skp` files emitted for SketchUp 2021 and later

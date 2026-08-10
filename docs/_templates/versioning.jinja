@@ -1,0 +1,11 @@
+{# SPDX-License-Identifier: MIT #}
+{% if documentation_versions %}
+<div class="version-switcher">
+  <label for="documentation-version">Documentation version</label>
+  <select id="documentation-version" onchange="if (this.value) window.location.href = this.value;">
+    {%- for item in documentation_versions %}
+      <option value="{{ item.url }}"{% if item.current %} selected{% endif %}>{{ item.label }}</option>
+    {%- endfor %}
+  </select>
+</div>
+{% endif %}
