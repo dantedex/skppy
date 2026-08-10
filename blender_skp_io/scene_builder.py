@@ -100,6 +100,8 @@ class BlenderSceneBuilder:
         # definition_id -> Mesh (not Object; Objects are created per-instance)
         # Also keyed by (definition_id, effective_material_id) for variants.
         self._bl_meshes: Dict[Any, bpy.types.Mesh] = {}
+        # Entities identity -> visible edges which are not used by a face.
+        self._loose_edges: Dict[int, list[Any]] = {}
         self._layer_collections: Dict[int, bpy.types.Collection] = {}
         # definition_id -> ComponentDefinition (for recursive instantiation)
         self._definition_map: Dict[int, Any] = {}
@@ -351,33 +353,10 @@ class BlenderSceneBuilder:
     # -
 
     def _build_definitions(self) -> None:
-        # Index ALL definitions so recursive instantiation can find containers.
+        """Index definitions; mesh data is built lazily for reachable instances."""
         for defn in self.model.definitions:
             self._definition_map[defn.id] = defn
-
-        # Build mesh data only for definitions that carry direct face geometry
-        # AND have at least one face with an explicit material.  Fully
-        # unpainted definitions are built per-instance to get the right
-        # inherited material and UVs.
-        definition_count = len(self.model.definitions)
-        for definition_index, defn in enumerate(self.model.definitions, start=1):
-            if defn.entities.faces:
-                # Cache the "no inherited material" version for fully-painted defs
-                # or definitions where inherited material is irrelevant.
-                prepared = defn.entities.prepare_mesh(
-                    defn.name,
-                    self._mat_by_id,
-                    split_holes_to_ngons=self.triangulation_mode == "NGONS",
-                )
-                mesh_data = self._build_mesh_from_prepared(prepared)
-                if mesh_data is not None:
-                    self._bl_meshes[defn.id] = mesh_data
-            if definition_count:
-                fraction = 0.25 + 0.45 * definition_index / definition_count
-                self._report_progress(
-                    fraction,
-                    f"Building definitions ({definition_index}/{definition_count})",
-                )
+        self._report_progress(0.70, f"Indexed {len(self.model.definitions)} component definitions")
 
     def _get_or_build_mesh(
         self,
@@ -394,18 +373,19 @@ class BlenderSceneBuilder:
         override is present, a variant mesh keyed by
         ``(defn.id, effective_material_id)`` is built and cached.
         """
-        if not defn.entities.faces:
+        loose_edges = self._visible_loose_edges(defn.entities)
+        if not defn.entities.faces and not loose_edges:
             return None
 
         # Check whether any face needs the inherited material.
         needs_inherited = effective_material_id is not None and any(
             f.front_material_id is None and f.back_material_id is None for f in defn.entities.faces
         )
-        if not needs_inherited:
-            return self._bl_meshes.get(defn.id)
+        if not needs_inherited and defn.id in self._bl_meshes:
+            return self._bl_meshes[defn.id]
 
         # Build or return a per-(definition, effective_material) variant.
-        cache_key = (defn.id, effective_material_id)
+        cache_key = (defn.id, effective_material_id) if needs_inherited else defn.id
         if cache_key in self._bl_meshes:
             return self._bl_meshes[cache_key]
 
@@ -416,7 +396,7 @@ class BlenderSceneBuilder:
             inherited_material_id=effective_material_id,
             split_holes_to_ngons=self.triangulation_mode == "NGONS",
         )
-        mesh_data = self._build_mesh_from_prepared(prepared)
+        mesh_data = self._build_mesh_from_prepared(prepared, defn.entities, loose_edges)
         if mesh_data is not None:
             self._bl_meshes[cache_key] = mesh_data
         return mesh_data
@@ -424,6 +404,8 @@ class BlenderSceneBuilder:
     def _build_mesh_from_prepared(
         self,
         prepared,  # skppy.PreparedMesh
+        entities=None,
+        loose_edges=None,
     ) -> Optional["bpy.types.Mesh"]:
         """
         Build a Blender mesh from PreparedMesh geometry.
@@ -432,14 +414,13 @@ class BlenderSceneBuilder:
         renderer-neutral PreparedMesh/IndexedPreparedMesh output.  This method
         only adapts that data to Blender datablocks.
         """
-        if not prepared.faces:
-            return None
-
         indexed = prepared.to_indexed(
             merge_vertices=self.merge_vertices,
             triangulate=self.triangulation_mode == "TRIS",
         )
-        if not indexed.faces:
+        loose_edges = loose_edges if loose_edges is not None else self._visible_loose_edges(entities)
+        line_edges = self._append_loose_edge_geometry(indexed, entities, loose_edges)
+        if not indexed.faces and not line_edges:
             return None
 
         has_default_faces, mat_slot_map = self._material_slot_layout(indexed)
@@ -448,7 +429,7 @@ class BlenderSceneBuilder:
         scaled_vertices = [
             (px * self.scale, py * self.scale, pz * self.scale) for px, py, pz in indexed.vertex_positions
         ]
-        mesh.from_pydata(scaled_vertices, [], indexed.faces)
+        mesh.from_pydata(scaled_vertices, line_edges, indexed.faces)
         mesh.update(calc_edges=True)
 
         self._assign_face_materials(mesh, indexed, mat_slot_map)
@@ -462,6 +443,80 @@ class BlenderSceneBuilder:
 
         self._compact_material_slots(mesh)
         return mesh
+
+    def _visible_loose_edges(self, entities) -> list[Any]:
+        """Return cached visible source edges which are not face boundaries."""
+        if entities is None:
+            return []
+        cache_key = id(entities)
+        cached = self._loose_edges.get(cache_key)
+        if cached is not None:
+            return cached
+        face_edge_ids = {
+            edge_use.edge_id
+            for face in entities.faces
+            for loop in (face.outer_loop, *face.inner_loops)
+            for edge_use in loop.edge_uses
+        }
+        edges = [edge for edge in entities.edges if edge.id not in face_edge_ids and not edge.is_hidden]
+        self._loose_edges[cache_key] = edges
+        return edges
+
+    def _append_loose_edge_geometry(self, indexed, entities, loose_edges) -> list[tuple[int, int]]:
+        """Append endpoints for loose SKP edges and return indexed Blender edges."""
+        if entities is None or not loose_edges:
+            return []
+        vertices = {vertex.id: vertex.position for vertex in entities.vertices}
+        source_indices: dict[int, int] = {}
+        position_indices = (
+            {self._position_key(position): index for index, position in enumerate(indexed.vertex_positions)}
+            if self.merge_vertices
+            else None
+        )
+        occupied = {
+            self._edge_key(face[index], face[(index + 1) % len(face)])
+            for face in indexed.faces
+            for index in range(len(face))
+        }
+        output: list[tuple[int, int]] = []
+        for edge in loose_edges:
+            start = self._loose_vertex_index(
+                edge.start_vertex_id, vertices, source_indices, indexed.vertex_positions, position_indices
+            )
+            end = self._loose_vertex_index(
+                edge.end_vertex_id, vertices, source_indices, indexed.vertex_positions, position_indices
+            )
+            if start is None or end is None or start == end:
+                continue
+            key = self._edge_key(start, end)
+            if key in occupied:
+                continue
+            occupied.add(key)
+            output.append((start, end))
+        return output
+
+    def _loose_vertex_index(self, vertex_id, vertices, source_indices, positions, position_indices) -> int | None:
+        """Resolve one source vertex, reusing source IDs and optionally positions."""
+        if vertex_id in source_indices:
+            return source_indices[vertex_id]
+        point = vertices.get(vertex_id)
+        if point is None:
+            return None
+        position = self._xyz(point)
+        key = self._position_key(position)
+        index = position_indices.get(key) if position_indices is not None else None
+        if index is None:
+            index = len(positions)
+            positions.append(position)
+            if position_indices is not None:
+                position_indices[key] = index
+        source_indices[vertex_id] = index
+        return index
+
+    @staticmethod
+    def _position_key(position) -> tuple[float, float, float]:
+        """Return the same positional key used by PreparedMesh indexing."""
+        return tuple(round(float(value), 9) for value in position)
 
     def _material_slot_layout(self, indexed) -> tuple[bool, Dict[str, int]]:
         """Map source material names to stable Blender slot indices."""
@@ -662,9 +717,10 @@ class BlenderSceneBuilder:
     # -
 
     def _build_root_geometry(self) -> None:
-        """Build a mesh for ungrouped faces at the model's root level."""
+        """Build meshes for ungrouped faces and loose edges at model root."""
         ent = self.model.entities
-        if not ent.faces:
+        loose_edges = self._visible_loose_edges(ent)
+        if not ent.faces and not loose_edges:
             return
         prepared = ent.prepare_mesh(
             "RootGeometry",
@@ -675,20 +731,26 @@ class BlenderSceneBuilder:
         for face in prepared.faces:
             layer_id = face.layer_id if self.import_by_layers else None
             faces_by_layer.setdefault(layer_id, []).append(face)
-        for layer_id, faces in faces_by_layer.items():
+        edges_by_layer: dict[int | None, list[Any]] = {}
+        for edge in loose_edges:
+            layer_id = edge.layer_id if self.import_by_layers else None
+            edges_by_layer.setdefault(layer_id, []).append(edge)
+        layer_ids = dict.fromkeys((*faces_by_layer, *edges_by_layer))
+        for layer_id in layer_ids:
+            faces = faces_by_layer.get(layer_id, [])
             layer_collection = self._collection_for_layer(layer_id, self._import_col)
             object_name = (
                 f"RootGeometry:{layer_collection.name}" if layer_collection is not self._import_col else "RootGeometry"
             )
             layer_mesh = type(prepared)(name=object_name, faces=faces)
-            mesh_data = self._build_mesh_from_prepared(layer_mesh)
+            mesh_data = self._build_mesh_from_prepared(layer_mesh, ent, edges_by_layer.get(layer_id, []))
             if mesh_data is None:
                 continue
             obj = bpy.data.objects.new(object_name, mesh_data)
             obj.matrix_world = Matrix.Identity(4)
             layer_collection.objects.link(obj)
             self.created_objects.append(obj)
-        logger.debug("Built root geometry mesh (%d faces)", len(ent.faces))
+        logger.debug("Built root geometry mesh (%d faces, %d loose edges)", len(ent.faces), len(loose_edges))
 
     # -
     # Instances

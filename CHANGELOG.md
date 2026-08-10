@@ -3,6 +3,18 @@
 Notable user-facing changes are recorded here. Versions follow Git tags and
 the project uses semantic versioning while the public API remains pre-1.0.
 
+## Unreleased
+
+### Changed
+
+- Blender imports build component meshes only when reachable instances need
+  them, while repeated instances continue sharing cached mesh data.
+
+### Fixed
+
+- Visible loose SketchUp edges, including large imported 2D CAD drawings and
+  line-only component definitions, are imported as Blender mesh edges.
+
 ## 0.9.0 - 2026-08-10
 
 ### Changed

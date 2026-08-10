@@ -181,6 +181,39 @@ def _run_synthetic(module_name: str) -> None:
     _assert_materials(scene_builder)
 
 
+def _run_loose_edges(module_name: str) -> None:
+    """Verify root and instanced 2D linework becomes shared Blender meshes."""
+    addon = importlib.import_module(module_name)
+    skppy = addon.skppy
+    scene_builder = importlib.import_module(f"{module_name}.scene_builder")
+
+    model = skppy.Model.new()
+    root_start = model.entities.add_vertex(0.0, 0.0, 0.0)
+    root_end = model.entities.add_vertex(10.0, 0.0, 0.0)
+    hidden_end = model.entities.add_vertex(10.0, 10.0, 0.0)
+    model.entities.add_edge(root_start, root_end)
+    hidden = model.entities.add_edge(root_end, hidden_end)
+    hidden.flags = 0x01
+
+    definition = model.add_definition("Linework")
+    line_start = definition.entities.add_vertex(0.0, 0.0, 0.0)
+    line_end = definition.entities.add_vertex(0.0, 5.0, 0.0)
+    definition.entities.add_edge(line_start, line_end)
+    model.entities.add_instance(definition, name="Linework A")
+    model.entities.add_instance(definition, name="Linework B")
+
+    builder = scene_builder.BlenderSceneBuilder(model, bpy.context, import_materials=False)
+    builder.build()
+    root_object = next((obj for obj in builder.created_objects if obj.name == "RootGeometry"), None)
+    if root_object is None or len(root_object.data.edges) != 1 or len(root_object.data.polygons) != 0:
+        raise AssertionError("root loose or hidden edges were not imported correctly")
+    instances = [obj for obj in builder.created_objects if obj.name in {"Linework A", "Linework B"}]
+    if len(instances) != 2 or any(len(obj.data.edges) != 1 for obj in instances):
+        raise AssertionError("line-only component instances were not imported")
+    if instances[0].data is not instances[1].data:
+        raise AssertionError("line-only instances did not share cached mesh data")
+
+
 def _run_layer_collections(module_name: str) -> None:
     """Verify layer grouping links root geometry to the intended collections."""
     addon = importlib.import_module(module_name)
@@ -741,6 +774,8 @@ def main() -> None:
     module_name = _install_extension(args.addon)
     _clear_scene()
     _run_synthetic(module_name)
+    _clear_scene()
+    _run_loose_edges(module_name)
     _clear_scene()
     _run_layer_collections(module_name)
     _clear_scene()
