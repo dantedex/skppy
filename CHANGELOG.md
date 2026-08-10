@@ -5,6 +5,8 @@ the project uses semantic versioning while the public API remains pre-1.0.
 
 ## Unreleased
 
+## 0.9.1 - 2026-08-10
+
 - Preserve door and window openings when triangulating walls with several coplanar holes.
 - Apply glued component cutting contours to their host faces during Blender import.
 
