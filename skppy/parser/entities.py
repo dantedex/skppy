@@ -40,7 +40,7 @@ from ..data_structure.entities import (
 )
 from ..data_structure.primitives import Vector2D, Vector3D
 from ..data_structure.model_metadata import AttributeDictionary
-from .attributes import parse_entity_attribute_dictionaries
+from .attributes import parse_attribute_dictionaries, parse_entity_attribute_dictionaries
 from .tlv import (
     TlvTag,
     find_child,
@@ -192,10 +192,11 @@ def parse_entities(payload: bytes) -> Entities:
     # Entities is the mutable public scope. Fill it as sections are decoded so
     # an omitted optional section naturally retains the shared empty default.
     entities = Entities()
-    entities.vertices = _parse_vertices(sections.get(TlvTag.VERTICES, b""))
-    entities.edges = _parse_edges(sections.get(TlvTag.EDGES, b""))
-    entities.faces = _parse_faces(sections.get(TlvTag.FACES, b""))
-    entities.component_instances = _parse_component_instances(sections.get(TlvTag.COMPONENT_INSTANCES, b""))
+    attributes: dict[int, list[AttributeDictionary]] = {}
+    entities.vertices = _parse_vertices(sections.get(TlvTag.VERTICES, b""), attributes)
+    entities.edges = _parse_edges(sections.get(TlvTag.EDGES, b""), attributes)
+    entities.faces = _parse_faces(sections.get(TlvTag.FACES, b""), attributes)
+    entities.component_instances = _parse_component_instances(sections.get(TlvTag.COMPONENT_INSTANCES, b""), attributes)
     entities.groups = _parse_groups(sections.get(TlvTag.GROUPS, b""))
     entities.images = _parse_images(sections.get(TlvTag.IMAGES, b""))
     entities.curves = _parse_curves(sections.get(TlvTag.CURVES, b""))
@@ -207,7 +208,13 @@ def parse_entities(payload: bytes) -> Entities:
     entities.texts = _parse_texts(sections.get(TlvTag.TEXTS, b""))
     entities.linear_dimensions = _parse_dimensions(sections.get(TlvTag.DIMENSIONS, b""))
     entities.radial_dimensions = _parse_radial_dimensions(sections.get(TlvTag.RADIAL_DIMENSIONS, b""))
-    entities.attribute_dictionaries_by_entity_id = _parse_scoped_attribute_dictionaries(sections)
+    attributes.update(
+        _parse_scoped_attribute_dictionaries(
+            sections,
+            excluded_sections={TlvTag.VERTICES, TlvTag.EDGES, TlvTag.FACES, TlvTag.COMPONENT_INSTANCES},
+        )
+    )
+    entities.attribute_dictionaries_by_entity_id = attributes
     return entities
 
 
@@ -237,11 +244,26 @@ def _resolve_curve_edge_membership(entities: Entities) -> None:
 
 
 def _read_entity_id(entity_base_payload: bytes) -> int:
-    id_wrapper = find_child(entity_base_payload, TlvTag.ID_WRAPPER)
+    return _read_entity_id_and_attributes(index_children(entity_base_payload), None)
+
+
+def _read_entity_id_and_attributes(
+    entity_fields: dict[int, bytes],
+    attributes: dict[int, list[AttributeDictionary]] | None,
+) -> int:
+    """Decode identity and collect dictionaries from one indexed entity base."""
+    id_wrapper = entity_fields.get(TlvTag.ID_WRAPPER)
     if not id_wrapper:
         return 0
-    id_val = find_child(id_wrapper, TlvTag.ID_VALUE)
-    return read_compact_int(id_val) if id_val else 0
+    id_fields = index_children(id_wrapper)
+    id_value = id_fields.get(TlvTag.ID_VALUE)
+    entity_id = read_compact_int(id_value) if id_value else 0
+    extended = id_fields.get(TlvTag.ID_EXT_PAYLOAD)
+    if attributes is not None and entity_id > 0 and extended is not None:
+        dictionaries = parse_attribute_dictionaries(extended)
+        if dictionaries:
+            attributes[entity_id] = dictionaries
+    return entity_id
 
 
 def _read_entity_layer_id(entity_base_payload: bytes) -> int | None:
@@ -251,6 +273,7 @@ def _read_entity_layer_id(entity_base_payload: bytes) -> int | None:
 
 def _parse_scoped_attribute_dictionaries(
     sections: dict[int, bytes],
+    excluded_sections: set[int] | None = None,
 ) -> dict[int, list[AttributeDictionary]]:
     """Collect named dictionaries from every supported entity section."""
     dictionaries_by_entity_id: dict[int, list[AttributeDictionary]] = {}
@@ -311,6 +334,8 @@ def _parse_scoped_attribute_dictionaries(
         ),
     )
     for section_tag, record_tag, base_path in section_specs:
+        if excluded_sections is not None and section_tag in excluded_sections:
+            continue
         section = sections.get(section_tag)
         if section is None:
             continue
@@ -338,18 +363,17 @@ def _parse_scoped_attribute_dictionaries(
 # -
 
 
-def _parse_vertices(section_payload: bytes) -> List[Vertex]:
+def _parse_vertices(
+    section_payload: bytes,
+    attributes: dict[int, list[AttributeDictionary]] | None = None,
+) -> List[Vertex]:
     vertices: List[Vertex] = []
     for tag, rec_p in iter_records(section_payload):
         if tag != TlvTag.VERTEX_RECORD:
             continue
         # ID: 0x05DC -> 0x05DE
         fields = index_children(rec_p)
-        id_wrap = fields.get(TlvTag.ID_WRAPPER)
-        vid = 0
-        if id_wrap:
-            id_val = find_child(id_wrap, TlvTag.ID_VALUE)
-            vid = read_compact_int(id_val) if id_val else 0
+        vid = _read_entity_id_and_attributes(fields, attributes)
 
         pos_p = fields.get(TlvTag.VERTEX_POSITION)
         if pos_p and len(pos_p) >= 24:
@@ -363,7 +387,10 @@ def _parse_vertices(section_payload: bytes) -> List[Vertex]:
 # -
 
 
-def _parse_edges(section_payload: bytes) -> List[Edge]:
+def _parse_edges(
+    section_payload: bytes,
+    attributes: dict[int, list[AttributeDictionary]] | None = None,
+) -> List[Edge]:
     edges: List[Edge] = []
     for tag, rec_p in iter_records(section_payload):
         if tag != TlvTag.EDGE_RECORD:
@@ -374,8 +401,8 @@ def _parse_edges(section_payload: bytes) -> List[Edge]:
         fields = index_children(rec_p)
         eb = fields.get(TlvTag.ENTITY_BASE)
         if eb:
-            eid = _read_entity_id(eb)
             entity_fields = index_children(eb)
+            eid = _read_entity_id_and_attributes(entity_fields, attributes)
             flags_p = entity_fields.get(TlvTag.ENTITY_FLAGS)
             if flags_p:
                 flags = read_compact_int(flags_p)
@@ -408,6 +435,7 @@ def _parse_edges(section_payload: bytes) -> List[Edge]:
 
 def _face_base_values(
     entity_base: bytes | None,
+    attributes: dict[int, list[AttributeDictionary]] | None = None,
 ) -> tuple[
     int,
     Optional[int],
@@ -423,7 +451,7 @@ def _face_base_values(
     layer = fields.get(TlvTag.ENTITY_LAYER_REF)
     front_uv, back_uv = _read_face_uv_projections(entity_base)
     return (
-        _read_entity_id(entity_base),
+        _read_entity_id_and_attributes(fields, attributes),
         read_compact_int(front_material) if front_material else None,
         read_compact_int(layer) if layer else None,
         front_uv,
@@ -448,13 +476,18 @@ def _face_loops(payload: bytes | None) -> tuple[Loop, List[Loop]]:
     return outer_loop, loops[1:]
 
 
-def _parse_faces(section_payload: bytes) -> List[Face]:
+def _parse_faces(
+    section_payload: bytes,
+    attributes: dict[int, list[AttributeDictionary]] | None = None,
+) -> List[Face]:
     faces: List[Face] = []
     for tag, rec_p in iter_records(section_payload):
         if tag != TlvTag.FACE_RECORD:
             continue
         fields = index_children(rec_p)
-        fid, front_material_id, layer_id, front_uv, back_uv = _face_base_values(fields.get(TlvTag.ENTITY_BASE))
+        fid, front_material_id, layer_id, front_uv, back_uv = _face_base_values(
+            fields.get(TlvTag.ENTITY_BASE), attributes
+        )
         # 0x0DAF is the back-material reference. The adjacent entity-base
         # 0x07D2 field belongs to the drawing element's layer instead.
         back_material_id = _face_back_material(fields.get(TlvTag.FACE_EXTRA_FLAG))
@@ -513,16 +546,18 @@ def _parse_loops(loops_payload: bytes) -> List[Loop]:
 def _populate_instance_record(
     instance: ComponentInstance | Group | Image,
     payload_1964: bytes,
+    attributes: dict[int, list[AttributeDictionary]] | None = None,
 ) -> None:
     """Apply a shared instance record to any instance-like public entity."""
     fields = index_children(payload_1964)
     eb = fields.get(TlvTag.ENTITY_BASE)
     if eb:
-        instance.id = _read_entity_id(eb)
-        mat_ref_p = index_children(eb).get(TlvTag.ENTITY_MATERIAL_REF)
+        entity_fields = index_children(eb)
+        instance.id = _read_entity_id_and_attributes(entity_fields, attributes)
+        mat_ref_p = entity_fields.get(TlvTag.ENTITY_MATERIAL_REF)
         if mat_ref_p:
             instance.material_id = read_compact_int(mat_ref_p)
-        layer_ref_p = index_children(eb).get(TlvTag.ENTITY_LAYER_REF)
+        layer_ref_p = entity_fields.get(TlvTag.ENTITY_LAYER_REF)
         if layer_ref_p:
             instance.layer_id = read_compact_int(layer_ref_p)
 
@@ -543,13 +578,16 @@ def _populate_instance_record(
         instance.guid = read_guid(guid_p)
 
 
-def _parse_component_instances(section_payload: bytes) -> List[ComponentInstance]:
+def _parse_component_instances(
+    section_payload: bytes,
+    attributes: dict[int, list[AttributeDictionary]] | None = None,
+) -> List[ComponentInstance]:
     instances: List[ComponentInstance] = []
     for tag, rec_p in iter_records(section_payload):
         if tag != TlvTag.INSTANCE_RECORD:
             continue
         instance = ComponentInstance()
-        _populate_instance_record(instance, rec_p)
+        _populate_instance_record(instance, rec_p, attributes)
         instances.append(instance)
     return instances
 

@@ -9,6 +9,7 @@ import pytest
 
 import skppy.parser.entities as entity_parser
 from skppy.data_structure.annotations import LinearDimension
+from skppy.data_structure.model_metadata import AttributeDictionary
 from skppy.writer.tlv import encode_record
 
 
@@ -24,6 +25,7 @@ class Tag:
     ENTITY_LAYER_REF = 0x07D2
     ENTITY_FLAGS = 0x07D3
     VERTEX_RECORD = 0x09C4
+    VERTEX_POSITION = 0x09C5
     EDGE_RECORD = 0x0BB8
     FACE_RECORD = 0x0DAC
     EDGE_USE = 0x0FA0
@@ -237,6 +239,31 @@ def test_face_and_loop_helpers_cover_empty_topology_and_unrelated_edge_uses():
 
 def test_scoped_attribute_scan_skips_unrelated_records():
     assert entity_parser._parse_scoped_attribute_dictionaries({0x1389: _record(Tag.UNKNOWN)}) == {}
+
+
+@pytest.mark.parametrize(
+    ("parser", "record_tag", "body"),
+    [
+        (entity_parser._parse_vertices, Tag.VERTEX_RECORD, _record(Tag.VERTEX_POSITION, struct.pack("<3d", 0, 0, 0))),
+        (entity_parser._parse_edges, Tag.EDGE_RECORD, b""),
+        (entity_parser._parse_faces, Tag.FACE_RECORD, b""),
+        (entity_parser._parse_component_instances, Tag.INSTANCE_RECORD, b""),
+    ],
+)
+def test_dense_entity_parsers_collect_attributes_during_primary_scan(monkeypatch, parser, record_tag, body):
+    expected = [AttributeDictionary(name="custom")]
+    monkeypatch.setattr(entity_parser, "parse_attribute_dictionaries", lambda _payload: expected)
+    id_wrapper = _record(
+        Tag.ID_WRAPPER,
+        _record(Tag.ID_VALUE, b"\x07") + _record(Tag.ID_EXT_PAYLOAD, _record(Tag.UNKNOWN)),
+    )
+    entity_payload = id_wrapper if record_tag == Tag.VERTEX_RECORD else _record(Tag.ENTITY_BASE, id_wrapper)
+    attributes = {}
+
+    parsed = parser(_record(record_tag, entity_payload + body), attributes)
+
+    assert parsed[0].id == 7
+    assert attributes == {7: expected}
 
 
 def test_arc_curve_accepts_first_and_last_edge_range_without_count():
