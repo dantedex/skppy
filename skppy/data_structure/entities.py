@@ -1025,6 +1025,7 @@ class Entities:
         material_lookup: Dict[int, "Material"],  # mat_id -> Material
         inherited_material_id: Optional[int] = None,
         split_holes_to_ngons: bool = False,
+        opening_positions_by_face_id: Optional[Dict[int, List[List[Tuple[float, float, float]]]]] = None,
     ) -> "PreparedMesh":
         """
         Build a :class:`~skppy.data_structure.scene.PreparedMesh` from this
@@ -1051,6 +1052,9 @@ class Entities:
             When True, faces with exactly one inner loop are represented as two
             simple n-gons joined by generated bridge edges.  Faces with
             multiple holes still fall back to triangulation.
+        opening_positions_by_face_id : dict, optional
+            Additional face-hole contours inferred from glued cutting
+            component instances, grouped by source face ID.
 
         Returns
         -------
@@ -1065,6 +1069,7 @@ class Entities:
             material_lookup,
             inherited_material_id,
             split_holes_to_ngons,
+            opening_positions_by_face_id,
         )
 
 

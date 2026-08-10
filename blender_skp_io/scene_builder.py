@@ -22,6 +22,7 @@ import numpy as np
 from mathutils import Matrix, Vector
 
 from .annotation_builder import BlenderAnnotationBuilder
+from .skppy.data_structure.openings import infer_cutting_openings
 from .skppy.exceptions import ComponentCycleError
 
 __all__ = ["BlenderSceneBuilder"]
@@ -107,6 +108,7 @@ class BlenderSceneBuilder:
         self._bl_definition_collections: Dict[tuple[int, int | None], bpy.types.Collection] = {}
         # Entities identity -> visible edges which are not used by a face.
         self._loose_edges: Dict[int, list[Any]] = {}
+        self._cutting_openings: Dict[int, dict[int, list[list[tuple[float, float, float]]]]] = {}
         self._layer_collections: Dict[int, bpy.types.Collection] = {}
         # definition_id -> ComponentDefinition (for recursive instantiation)
         self._definition_map: Dict[int, Any] = {}
@@ -400,11 +402,21 @@ class BlenderSceneBuilder:
             self._mat_by_id,
             inherited_material_id=effective_material_id,
             split_holes_to_ngons=self.triangulation_mode == "NGONS",
+            opening_positions_by_face_id=self._openings_for(defn.entities),
         )
         mesh_data = self._build_mesh_from_prepared(prepared, defn.entities, loose_edges)
         if mesh_data is not None:
             self._bl_meshes[cache_key] = mesh_data
         return mesh_data
+
+    def _openings_for(self, entities) -> dict[int, list[list[tuple[float, float, float]]]]:
+        """Return cached face cuts inferred from glued child components."""
+        cache_key = id(entities)
+        cached = self._cutting_openings.get(cache_key)
+        if cached is None:
+            cached = infer_cutting_openings(entities, self._definition_map)
+            self._cutting_openings[cache_key] = cached
+        return cached
 
     def _build_mesh_from_prepared(
         self,
@@ -731,6 +743,7 @@ class BlenderSceneBuilder:
             "RootGeometry",
             self._mat_by_id,
             split_holes_to_ngons=self.triangulation_mode == "NGONS",
+            opening_positions_by_face_id=self._openings_for(ent),
         )
         faces_by_layer: dict[int | None, list] = {}
         for face in prepared.faces:

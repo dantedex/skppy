@@ -164,6 +164,12 @@ Controls how polygons are tessellated after import.
 by `skppy` before Blender mesh creation. Blender cannot natively represent
 holey polygons, and two simple n-gons only cover the single-hole case.
 
+Components whose SketchUp behavior is set to **Cuts Opening** are also
+resolved before mesh creation. The importer traces the component's glue-plane
+outline, transforms it into the containing definition, and subtracts it from
+the attached host face. This preserves dynamic door and window cuts that are
+not stored as ordinary inner loops on the face.
+
 ---
 
 ## Import by Layers

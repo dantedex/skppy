@@ -29,7 +29,7 @@ class _LoopGeometry:
     """Resolved positions and source edge IDs for one valid face loop."""
 
     positions: list[Position3D]
-    edge_ids: list[int]
+    edge_ids: list[int | None]
 
 
 @dataclass(slots=True)
@@ -53,6 +53,7 @@ class _MeshPreparer:
     materials: dict[int, Material]
     inherited_material_id: int | None
     split_holes_to_ngons: bool
+    opening_positions_by_face_id: dict[int, list[list[Position3D]]] = field(default_factory=dict)
     edge_map: dict[int, tuple[int, int]] = field(init=False)
     edges: dict[int, Edge] = field(init=False)
     vertices: dict[int, Position3D] = field(init=False)
@@ -94,6 +95,11 @@ class _MeshPreparer:
             return None
 
         holes = [resolved for loop in face.inner_loops if (resolved := self._resolve_loop(loop)) is not None]
+        holes.extend(
+            _LoopGeometry(positions, [None] * len(positions))
+            for positions in self.opening_positions_by_face_id.get(face.id, [])
+            if len(positions) >= 3
+        )
         material_id, projection = face.resolve_material_mapping(self.inherited_material_id)
         if projection is not None and projection.is_singular():
             projection = None
@@ -111,7 +117,7 @@ class _MeshPreparer:
     def _resolve_loop(self, loop: Loop) -> _LoopGeometry | None:
         """Resolve a complete loop or reject it when any reference is dangling."""
         vertex_ids = loop.vertex_ids(self.edge_map)
-        edge_ids = [edge_use.edge_id for edge_use in loop.edge_uses]
+        edge_ids: list[int | None] = [edge_use.edge_id for edge_use in loop.edge_uses]
         if len(vertex_ids) < 3 or len(edge_ids) != len(vertex_ids):
             return None
         if any(vertex_id not in self.vertices for vertex_id in vertex_ids):
@@ -196,9 +202,9 @@ class _MeshPreparer:
         )
 
 
-def _boundary_edge_lookup(loops: list[_LoopGeometry]) -> dict[tuple[int, int], int]:
+def _boundary_edge_lookup(loops: list[_LoopGeometry]) -> dict[tuple[int, int], int | None]:
     """Map combined-loop corner pairs back to serialized source edge IDs."""
-    lookup: dict[tuple[int, int], int] = {}
+    lookup: dict[tuple[int, int], int | None] = {}
     offset = 0
     for loop in loops:
         length = len(loop.positions)
@@ -238,6 +244,7 @@ def prepare_entities_mesh(
     material_lookup: dict[int, Material],
     inherited_material_id: int | None = None,
     split_holes_to_ngons: bool = False,
+    opening_positions_by_face_id: dict[int, list[list[Position3D]]] | None = None,
 ) -> PreparedMesh:
     """Build a prepared mesh from one format-neutral entities scope."""
     return _MeshPreparer(
@@ -245,4 +252,5 @@ def prepare_entities_mesh(
         material_lookup,
         inherited_material_id,
         split_holes_to_ngons,
+        opening_positions_by_face_id or {},
     ).prepare(name)
