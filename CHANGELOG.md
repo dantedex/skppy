@@ -3,7 +3,7 @@
 Notable user-facing changes are recorded here. Versions follow Git tags and
 the project uses semantic versioning while the public API remains pre-1.0.
 
-## Unreleased
+## 0.9.0 - 2026-08-10
 
 ### Changed
 
