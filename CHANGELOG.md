@@ -9,8 +9,8 @@ the project uses semantic versioning while the public API remains pre-1.0.
 
 - Blender imports build component meshes only when reachable instances need
   them, while repeated instances continue sharing cached mesh data.
-- Blender imports reuse component definition collections by default, avoiding
-  expanded copies of deeply repeated component object hierarchies.
+- Blender imports can reuse component definition collections, avoiding
+  expanded copies of deeply repeated component object hierarchies when enabled.
 - Modern files collect attributes for dense geometry sections during their
   primary parse instead of scanning every vertex and edge a second time.
 - Large CAD faces use bounded ear selection and triangle merging, avoiding

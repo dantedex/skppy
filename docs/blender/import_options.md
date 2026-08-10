@@ -223,17 +223,17 @@ flat sub-collections.
 
 **Property:** `use_collection_instances`
 **Type:** Boolean
-**Default:** `True`
+**Default:** `False`
 
 Build every reachable SketchUp component definition once in an unlinked
 Blender collection. Component placements become collection-instance Empties,
 including nested placements. Repeated definitions therefore reuse both mesh
 data and their stored child hierarchy instead of creating another object tree.
 
-This is the recommended mode for large architectural models and imported CAD
-drawings. Disable it when every nested component must become a directly
-editable Blender object. **Import by Layers** and **Flatten Hierarchy** require
-expanded objects and therefore take precedence over this option.
+Enable it for large architectural models and imported CAD drawings. Keep it
+disabled when every nested component should become a directly editable
+Blender object. **Import by Layers** and **Flatten Hierarchy** require expanded
+objects and therefore take precedence over this option.
 
 ---
 

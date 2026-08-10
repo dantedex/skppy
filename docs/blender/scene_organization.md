@@ -14,27 +14,33 @@ collection reuse for that import.
 
 ## Default layout
 
-With collection reuse enabled, each component definition is built once in an
-unlinked source collection. Only its placements appear in the imported scene:
+With all organization options disabled, an import can look like this. The
+names are illustrative, but the object types and parent relationships reflect
+the importer rules:
 
 ```text
 Scene Collection
 \- house
    +- RootGeometry [Mesh]
-   +- Chair A [Collection Instance]
-   +- Room [Collection Instance]
+   +- Chair A [Mesh]
+   +- Room [Empty]
+   |  +- Room:faces [Mesh]
+   |  +- Chair B [Mesh]
+   |  \- Text_42 [Font]
    +- GuidePoint_7 [Empty]
    \- Front View [Camera]
 ```
 
-`RootGeometry` contains ungrouped root faces and visible loose edges. Nested
-components, construction geometry, and annotations live once in the source
-definition collection and appear through every placement. The source
-collections remain unlinked so their contents are not displayed a second time.
+`RootGeometry` contains ungrouped root faces and visible loose edges. A
+definition containing only mesh geometry becomes a Mesh object directly. A
+definition with nested instances, construction entities, or annotations gets
+an Empty at the instance transform; direct geometry becomes its identity-local
+`<instance>:faces` child.
 
-Disable **Reuse Component Collections** to obtain the expanded Empty/Mesh
-parent hierarchy. Instances still share compatible Mesh datablocks in that
-mode, but every placement receives its own Blender object tree.
+Compatible instances share Mesh datablocks, although every placement receives
+its own Blender object tree. Enable **Reuse Component Collections** to build
+the complete definition hierarchy once in an unlinked source collection and
+represent its placements as collection-instance Empties.
 
 ## With layer collections
 

@@ -99,7 +99,7 @@ class IMPORT_OT_skp(Operator, ImportHelper):
     use_collection_instances: BoolProperty(
         name="Reuse Component Collections",
         description="Build reusable components once as Blender collection instances for much faster imports",
-        default=True,
+        default=False,
     )
 
     use_background_parse: BoolProperty(
