@@ -147,6 +147,19 @@ def test_ear_helpers_cover_short_triangle_fan_and_degenerate_quality():
     assert triangulation._triangle_shape_quality((0.0, 0.0), (0.0, 0.0), (0.0, 0.0)) == 0.0
 
 
+def test_large_polygon_uses_first_valid_ear(monkeypatch):
+    monkeypatch.setattr(triangulation, "_MAX_QUALITY_GUIDED_EAR_VERTICES", 3)
+    monkeypatch.setattr(
+        triangulation,
+        "_best_ear",
+        lambda *_args: (_ for _ in ()).throw(AssertionError("quality scan used for a large polygon")),
+    )
+    points = [(0.0, 0.0), (2.0, 0.0), (2.0, 2.0), (0.0, 2.0)]
+    assert len(triangulation._ear_clip([0, 1, 2, 3], points)) == 2
+    monkeypatch.setattr(triangulation, "_is_ear", lambda *_args: False)
+    assert triangulation._first_ear([0, 1, 2, 3], points) is None
+
+
 def test_ear_rejects_a_diagonal_that_crosses_an_unrelated_edge(monkeypatch):
     points = [(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (2.0, 2.0), (-1.0, 2.0)]
     monkeypatch.setattr(triangulation, "_point_in_triangle", lambda *_args: False)

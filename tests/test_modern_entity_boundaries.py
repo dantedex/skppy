@@ -241,6 +241,17 @@ def test_scoped_attribute_scan_skips_unrelated_records():
     assert entity_parser._parse_scoped_attribute_dictionaries({0x1389: _record(Tag.UNKNOWN)}) == {}
 
 
+def test_scoped_attribute_scan_collects_non_dense_entity_types(monkeypatch):
+    expected = [AttributeDictionary(name="group")]
+    monkeypatch.setattr(entity_parser, "_read_entity_id", lambda _payload: 7)
+    monkeypatch.setattr(entity_parser, "parse_entity_attribute_dictionaries", lambda _payload: expected)
+    group = _record(
+        Tag.GROUP_RECORD,
+        _record(Tag.INSTANCE_RECORD, _record(Tag.ENTITY_BASE, _record(Tag.ID_WRAPPER))),
+    )
+    assert entity_parser._parse_scoped_attribute_dictionaries({entity_parser.TlvTag.GROUPS: group}) == {7: expected}
+
+
 @pytest.mark.parametrize(
     ("parser", "record_tag", "body"),
     [

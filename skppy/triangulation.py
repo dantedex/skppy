@@ -99,6 +99,11 @@ _LENGTH_EPSILON = 1e-12
 _SQUARED_LENGTH_EPSILON = _LENGTH_EPSILON**2
 _PROJECTED_AREA_EPSILON = 1e-12
 
+# Scanning every candidate ear and every remaining vertex is cubic. Preserve
+# quality selection for ordinary model faces and use deterministic first-ear
+# clipping for large CAD boundaries.
+_MAX_QUALITY_GUIDED_EAR_VERTICES = 256
+
 # -
 # Public API
 # -
@@ -911,6 +916,17 @@ def _best_ear(vertices: List[int], pts: List[Tuple[float, float]]) -> tuple[int,
     return best
 
 
+def _first_ear(vertices: List[int], pts: List[Tuple[float, float]]) -> tuple[int, int, int] | None:
+    """Return the first valid ear without the cubic quality scan."""
+    count = len(vertices)
+    for current in range(count):
+        previous = (current - 1) % count
+        following = (current + 1) % count
+        if _is_ear(previous, current, following, vertices, pts):
+            return previous, current, following
+    return None
+
+
 def _fan_triangles(vertices: List[int]) -> List[Tuple[int, int, int]]:
     """Return the deterministic fallback fan for a degenerate remainder."""
     return [(vertices[0], vertices[index], vertices[index + 1]) for index in range(1, len(vertices) - 1)]
@@ -945,7 +961,7 @@ def _ear_clip(
     triangles: List[Tuple[int, int, int]] = []
 
     while len(verts) > 3:
-        best_ear = _best_ear(verts, pts)
+        best_ear = _best_ear(verts, pts) if len(verts) <= _MAX_QUALITY_GUIDED_EAR_VERTICES else _first_ear(verts, pts)
         if best_ear is None:
             # No ear found - polygon may be degenerate; fallback to fan.
             triangles.extend(_fan_triangles(verts))

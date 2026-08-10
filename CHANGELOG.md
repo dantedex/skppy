@@ -13,6 +13,8 @@ the project uses semantic versioning while the public API remains pre-1.0.
   expanded copies of deeply repeated component object hierarchies.
 - Modern files collect attributes for dense geometry sections during their
   primary parse instead of scanning every vertex and edge a second time.
+- Large CAD faces use bounded ear selection and triangle merging, avoiding
+  cubic n-gon preparation on boundaries with hundreds of vertices and holes.
 
 ### Fixed
 

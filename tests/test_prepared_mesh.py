@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: MIT
 import pytest
 
+import skppy.data_structure.mesh_preparation as mesh_preparation
 from skppy.data_structure.entities import (
     Edge,
     EdgeUse,
@@ -325,7 +326,7 @@ def test_prepare_mesh_can_split_single_hole_face_into_ngons():
     assert all(edge_ids.count(None) == 2 for edge_ids in indexed.face_edge_ids)
 
 
-def test_prepare_mesh_merges_multiple_hole_triangles_into_ngons():
+def test_prepare_mesh_merges_multiple_hole_triangles_into_ngons(monkeypatch):
     vertices = [
         Vertex(1, Vector3D(0.0, 0.0, 0.0)),
         Vertex(2, Vector3D(10.0, 0.0, 0.0)),
@@ -393,3 +394,7 @@ def test_prepare_mesh_merges_multiple_hole_triangles_into_ngons():
     assert any(len(prepared_face.vertex_positions) > 3 for prepared_face in merged.faces)
     assert all(prepared_face.source_face_id == 200 for prepared_face in merged.faces)
     assert all(len(prepared_face.edge_ids) == len(prepared_face.vertex_positions) for prepared_face in merged.faces)
+
+    monkeypatch.setattr(mesh_preparation, "_MAX_NGON_MERGE_TRIANGLES", 0)
+    bounded = entities.prepare_mesh("multiple holes", {}, split_holes_to_ngons=True)
+    assert bounded.faces == triangulated.faces

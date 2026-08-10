@@ -18,6 +18,11 @@ from .scene import PreparedFace, PreparedMesh, _planar_uv, _unit_normal
 Position3D = tuple[float, float, float]
 Normal3D = tuple[float, float, float]
 
+# Greedy triangle-group merging is intentionally bounded: its repeated
+# adjacency search becomes prohibitively expensive on CAD faces with hundreds
+# of boundary vertices and several holes.
+_MAX_NGON_MERGE_TRIANGLES = 256
+
 
 @dataclass(slots=True)
 class _LoopGeometry:
@@ -157,7 +162,7 @@ class _MeshPreparer:
             hole_positions,
             geometry.normal,
         )
-        if self.split_holes_to_ngons and len(hole_positions) > 1:
+        if self.split_holes_to_ngons and len(hole_positions) > 1 and len(triangles) <= _MAX_NGON_MERGE_TRIANGLES:
             polygons = merge_triangles_to_ngons(triangles, all_positions, geometry.normal)
             if polygons:
                 return polygons
