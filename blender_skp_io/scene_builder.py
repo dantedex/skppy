@@ -31,6 +31,7 @@ logger = logging.getLogger(__name__)
 
 # SketchUp stores positions in internal inches; default scale converts to metres.
 _DEFAULT_SCALE = 0.0254
+_MINIMUM_CAMERA_CLIP_END = 100_000.0
 _EDGE_FLAG_SMOOTH = 0x04
 _SMOOTH_EDGE_MAX_ANGLE = math.radians(40.0)
 
@@ -1251,7 +1252,7 @@ class BlenderSceneBuilder:
             )
 
         cam_data.clip_start = cam.near * self.scale
-        cam_data.clip_end = cam.far * self.scale
+        cam_data.clip_end = max(cam.far * self.scale, _MINIMUM_CAMERA_CLIP_END)
 
         cam_obj = bpy.data.objects.new(name, cam_data)
         self._import_col.objects.link(cam_obj)

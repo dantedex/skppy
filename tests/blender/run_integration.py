@@ -566,6 +566,7 @@ def _run_cameras_and_scenes(module_name: str) -> None:
         raise AssertionError("standalone perspective camera was not imported")
     _assert_close(standalone.location.x, builder.scale, "camera eye x")
     _assert_close(standalone.data.angle_y, math.radians(50.0), "camera FOV")
+    _assert_close(standalone.data.clip_end, 100_000.0, "camera far clipping plane")
     if saved.data.type != "ORTHO":
         raise AssertionError("saved scene camera did not retain projection")
     _assert_close(saved.data.ortho_scale, 20.0 * builder.scale, "ortho height")

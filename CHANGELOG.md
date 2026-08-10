@@ -21,6 +21,8 @@ the project uses semantic versioning while the public API remains pre-1.0.
 
 ### Fixed
 
+- Imported Blender cameras use a far clipping plane of at least 100 km so
+  large scenes remain visible through saved views.
 - Visible loose SketchUp edges, including large imported 2D CAD drawings and
   line-only component definitions, are imported as Blender mesh edges.
 

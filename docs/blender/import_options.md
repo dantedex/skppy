@@ -140,6 +140,10 @@ The camera matrix is derived from the `eye`, `target`, and `up` vectors:
 FOV is applied to `camera.data.angle_x` or `camera.data.angle_y`; orthographic
 views use `camera.data.ortho_scale`.
 
+The imported far clipping plane keeps the SketchUp camera value when it is
+larger, but never uses less than 100,000 metres. This prevents saved cameras
+from clipping large buildings, site plans, and georeferenced scenes.
+
 **Disable**: No cameras are created. Use this if the file has many saved scenes
 that you do not need in Blender.
 
