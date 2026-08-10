@@ -145,9 +145,11 @@ jobs:
           temp_root="$(cygpath -u "$RUNNER_TEMP")"
           output_dir="$temp_root/skppy-tests-current"
           python_exe="$(cygpath -u "$pythonLocation/python.exe")"
+          skppy_path="$(cygpath -w "$(cygpath -u "$GITHUB_WORKSPACE")/skppy")"
           make generate CC=gcc RUNNER= NATIVE_RUNNER=1 \
             PYTHON="$python_exe" OUTPUT_DIR="$output_dir"
-          OUTPUT_DIR="$(cygpath -w "$output_dir")" "$python_exe" run_tests.py
+          OUTPUT_DIR="$(cygpath -w "$output_dir")" SKPPY_PATH="$skppy_path" \
+            "$python_exe" run_tests.py
 
       - name: Validate every supported public save target
         working-directory: skppy_tests
