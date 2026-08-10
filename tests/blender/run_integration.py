@@ -394,6 +394,38 @@ def _run_hierarchy_modes(module_name: str) -> None:
         raise AssertionError("recursive component definitions were not rejected")
 
 
+def _run_collection_instances(module_name: str) -> None:
+    """Verify reusable collection hierarchies avoid expanded object copies."""
+    addon = importlib.import_module(module_name)
+    scene_builder = importlib.import_module(f"{module_name}.scene_builder")
+    builder = scene_builder.BlenderSceneBuilder(
+        _hierarchy_model(addon.skppy),
+        bpy.context,
+        import_materials=False,
+        use_collection_instances=True,
+    )
+    builder.build()
+
+    if len(builder.created_objects) != 3:
+        raise AssertionError("collection import exposed internal definition objects as scene objects")
+    leaf_a = bpy.data.objects["Leaf A"]
+    leaf_b = bpy.data.objects["Leaf B"]
+    container = bpy.data.objects["Container"]
+    if any(obj.instance_type != "COLLECTION" for obj in (leaf_a, leaf_b, container)):
+        raise AssertionError("root components were not imported as collection instances")
+    if leaf_a.instance_collection is not leaf_b.instance_collection:
+        raise AssertionError("repeated components did not share their definition collection")
+    nested = container.instance_collection.objects.get("Nested Leaf")
+    if nested is None or nested.instance_type != "COLLECTION":
+        raise AssertionError("nested component was expanded instead of instanced")
+    if nested.instance_collection is not leaf_a.instance_collection:
+        raise AssertionError("nested and root components did not reuse one definition collection")
+    if any(child is container.instance_collection for child in builder._import_col.children):
+        raise AssertionError("definition source collection was linked visibly beside its instances")
+    _assert_close(container.matrix_world.translation.x, 10.0 * builder.scale, "collection container x")
+    _assert_close(nested.matrix_world.translation.x, 2.0 * builder.scale, "collection nested local x")
+
+
 def _run_face_modes(module_name: str) -> None:
     """Verify NGON, triangle, and quad topology modes in Blender itself."""
     addon = importlib.import_module(module_name)
@@ -780,6 +812,8 @@ def main() -> None:
     _run_layer_collections(module_name)
     _clear_scene()
     _run_hierarchy_modes(module_name)
+    _clear_scene()
+    _run_collection_instances(module_name)
     _clear_scene()
     _run_face_modes(module_name)
     _clear_scene()

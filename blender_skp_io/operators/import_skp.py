@@ -96,6 +96,12 @@ class IMPORT_OT_skp(Operator, ImportHelper):
         default=False,
     )
 
+    use_collection_instances: BoolProperty(
+        name="Reuse Component Collections",
+        description="Build reusable components once as Blender collection instances for much faster imports",
+        default=True,
+    )
+
     use_background_parse: BoolProperty(
         default=False,
         options={"HIDDEN", "SKIP_SAVE"},
@@ -238,6 +244,7 @@ class IMPORT_OT_skp(Operator, ImportHelper):
             triangulation_mode=self.triangulation_mode,
             import_by_layers=self.import_by_layers,
             flatten_hierarchy=self.flatten_hierarchy,
+            use_collection_instances=self.use_collection_instances,
             progress_callback=lambda fraction, message: self._update_progress(
                 context,
                 50.0 + fraction * 50.0,
@@ -321,6 +328,9 @@ class IMPORT_OT_skp(Operator, ImportHelper):
         col.prop(self, "smooth_edges")
         col.prop(self, "triangulation_mode")
         col.prop(self, "flatten_hierarchy")
+        instance_row = col.row()
+        instance_row.enabled = not self.flatten_hierarchy and not self.import_by_layers
+        instance_row.prop(self, "use_collection_instances")
         col.separator()
 
         col.label(text="Scene")

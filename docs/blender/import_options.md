@@ -219,6 +219,24 @@ flat sub-collections.
 
 ---
 
+## Reuse Component Collections
+
+**Property:** `use_collection_instances`
+**Type:** Boolean
+**Default:** `True`
+
+Build every reachable SketchUp component definition once in an unlinked
+Blender collection. Component placements become collection-instance Empties,
+including nested placements. Repeated definitions therefore reuse both mesh
+data and their stored child hierarchy instead of creating another object tree.
+
+This is the recommended mode for large architectural models and imported CAD
+drawings. Disable it when every nested component must become a directly
+editable Blender object. **Import by Layers** and **Flatten Hierarchy** require
+expanded objects and therefore take precedence over this option.
+
+---
+
 ## Flatten Hierarchy
 
 **Property:** `flatten_hierarchy`
@@ -230,7 +248,7 @@ Blender object parenting.
 
 | Value | Effect |
 |-------|--------|
-| `False` | Mesh-only leaf instances become Mesh objects directly. Containers become Empty parents, with direct faces in an identity-transform `<name>:faces` child. Preserves the SKP component tree. |
+| `False` | Keep collection instances when reuse is enabled. With reuse disabled, mesh-only leaves become Mesh objects and containers become Empty parents. |
 | `True` | No Empty parents. Each mesh object is placed directly in world space using the accumulated `world_matrix = parent_world @ local_matrix`. Simpler scene graph, but loses component structure. |
 
 **Use `False`** when you need to re-export or edit components individually.

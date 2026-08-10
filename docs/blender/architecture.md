@@ -103,6 +103,10 @@ reported by the operator.
      6. `_build_root_annotations()`
      7. `_build_root_instances()`
      8. `_build_cameras()`
+   - In the default collection-instance mode, reachable definition/material
+     variants are built once and nested component references reuse those
+     unlinked source collections. Layer or flattened imports use expanded
+     objects instead.
    - Calls the optional progress callback between phases and after each
      material and component definition.
 

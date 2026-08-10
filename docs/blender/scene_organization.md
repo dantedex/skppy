@@ -2,46 +2,39 @@
 
 The importer keeps every import inside one top-level Blender collection. Its
 name is the stem of the `.skp` filename, or `SKP Import` when the model has no
-source path. The options **Import by Layers** and **Flatten Hierarchy** control
-two independent parts of the result:
+source path. **Reuse Component Collections**, **Import by Layers**, and
+**Flatten Hierarchy** control how the result is represented:
 
-- collections describe SketchUp layers/tags;
-- object parenting describes component, group, and image nesting.
+- collection reuse avoids expanding repeated component hierarchies;
+- layer collections describe SketchUp layers/tags;
+- flattening removes object parenting from expanded imports.
 
-Changing one does not implicitly change the other.
+Layer grouping or flattening requires expanded objects and therefore disables
+collection reuse for that import.
 
 ## Default layout
 
-With **Import by Layers** and **Flatten Hierarchy** both disabled, an import can
-look like this. The names are illustrative, but the object types and parent
-relationships reflect the importer rules.
+With collection reuse enabled, each component definition is built once in an
+unlinked source collection. Only its placements appear in the imported scene:
 
 ```text
 Scene Collection
 \- house
    +- RootGeometry [Mesh]
-   +- Chair A [Mesh]
-   +- Room [Empty]
-   |  +- Room:faces [Mesh]
-   |  +- Chair B [Mesh]
-   |  \- Text_42 [Font]
+   +- Chair A [Collection Instance]
+   +- Room [Collection Instance]
    +- GuidePoint_7 [Empty]
    \- Front View [Camera]
 ```
 
-`RootGeometry` contains ungrouped faces from the SketchUp model root. A
-component, group, or image definition that contains only its own face geometry
-is represented directly by a Mesh object, such as `Chair A`; an unnecessary
-Empty is not added. A definition that also contains nested instances,
-construction entities, or annotations gets an Empty at the instance transform.
-Its direct faces become an identity-transform child named `<instance>:faces`,
-and its other contents are parented below the same Empty.
+`RootGeometry` contains ungrouped root faces and visible loose edges. Nested
+components, construction geometry, and annotations live once in the source
+definition collection and appear through every placement. The source
+collections remain unlinked so their contents are not displayed a second time.
 
-Component definitions are converted to Blender Mesh datablocks, not to
-collections of their own. Instances of the same definition reuse a Mesh
-datablock when their effective inherited material permits it. Editing shared
-mesh data in Blender therefore affects every object using that data; use
-Blender's **Make Single User** command first when an instance must diverge.
+Disable **Reuse Component Collections** to obtain the expanded Empty/Mesh
+parent hierarchy. Instances still share compatible Mesh datablocks in that
+mode, but every placement receives its own Blender object tree.
 
 ## With layer collections
 
@@ -96,8 +89,8 @@ changes transforms and parenting, not collection assignment.
 | SketchUp content | Blender result | Placement |
 |---|---|---|
 | Ungrouped root faces | One `RootGeometry` Mesh, or one Mesh per layer | Identity/world origin |
-| Component, group, or image with faces only | Mesh object using cached definition data | Instance transform |
-| Container with nested or auxiliary content | Empty plus optional `<name>:faces` Mesh | Parent-child hierarchy |
+| Component, group, or image | Collection-instance Empty by default | Instance transform |
+| Expanded component hierarchy | Mesh leaf or Empty plus optional `<name>:faces` Mesh | Parent-child hierarchy |
 | Guide point | Spherical, in-front Empty | Source point |
 | Guide line | Non-rendering Mesh edge | Source line, displayed with finite extent |
 | Section plane | Oriented cube-display Empty | Source plane; does not enable clipping |
@@ -105,9 +98,10 @@ changes transforms and parenting, not collection assignment.
 | Linear/radial dimension | Font object plus recoverable line Meshes | Model-space dimension geometry |
 | Camera or saved-scene camera | Camera object | Always in the top-level import collection |
 
-Ordinary SketchUp edges are used to construct face topology; loose ordinary
-edges are not emitted as separate Blender curve or mesh objects. Guide and
-annotation lines are the explicit line-object exceptions.
+Visible SketchUp edges not used by a face are emitted as edges in the owning
+Blender mesh. This preserves 2D CAD linework and line-only component
+definitions without creating one object per segment. Guide and annotation
+lines remain explicit helper objects.
 
 ## Materials, textures, and saved scenes
 
@@ -121,4 +115,3 @@ only by a saved scene/page also becomes a Camera named from that scene. The
 scene ID, description, hidden entity/layer IDs, active section plane IDs, and
 slideshow flag are retained as custom properties; SketchUp pages do not become
 Blender scenes or collections.
-

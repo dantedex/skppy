@@ -63,6 +63,7 @@ class BlenderSceneBuilder:
     import_materials : If True, create Blender materials from skppy Materials.
     merge_vertices   : If True, call bmesh.ops.remove_doubles after building each mesh.
     smooth_edges     : If True, apply SketchUp smooth/soft edge shading.
+    use_collection_instances : If True, reuse definition collections instead of expanding every placement.
     """
 
     def __init__(
@@ -77,6 +78,7 @@ class BlenderSceneBuilder:
         triangulation_mode: str = "NGONS",
         import_by_layers: bool = False,
         flatten_hierarchy: bool = False,
+        use_collection_instances: bool = False,
         progress_callback: Callable[[float, str], None] | None = None,
     ):
         self.model = model
@@ -89,6 +91,7 @@ class BlenderSceneBuilder:
         self.triangulation_mode = triangulation_mode
         self.import_by_layers = import_by_layers
         self.flatten_hierarchy = flatten_hierarchy
+        self.use_collection_instances = use_collection_instances
         self._progress_callback = progress_callback
 
         # Maps skppy IDs to Blender data-blocks
@@ -100,6 +103,8 @@ class BlenderSceneBuilder:
         # definition_id -> Mesh (not Object; Objects are created per-instance)
         # Also keyed by (definition_id, effective_material_id) for variants.
         self._bl_meshes: Dict[Any, bpy.types.Mesh] = {}
+        # (definition_id, inherited_material_id) -> reusable component collection.
+        self._bl_definition_collections: Dict[tuple[int, int | None], bpy.types.Collection] = {}
         # Entities identity -> visible edges which are not used by a face.
         self._loose_edges: Dict[int, list[Any]] = {}
         self._layer_collections: Dict[int, bpy.types.Collection] = {}
@@ -758,6 +763,14 @@ class BlenderSceneBuilder:
 
     def _build_root_instances(self) -> None:
         """Create root-level component instances, groups, and images."""
+        if self.use_collection_instances and not self.flatten_hierarchy and not self.import_by_layers:
+            for instance in (
+                *self.model.entities.component_instances,
+                *self.model.entities.groups,
+                *self.model.entities.images,
+            ):
+                self._instantiate_collection(instance, self._import_col)
+            return
         flat_world = Matrix.Identity(4) if self.flatten_hierarchy else None
         for inst in self.model.entities.component_instances:
             self._instantiate(inst, self._import_col, parent_obj=None, world_matrix=flat_world)
@@ -765,6 +778,89 @@ class BlenderSceneBuilder:
             self._instantiate(group, self._import_col, parent_obj=None, world_matrix=flat_world)
         for image in self.model.entities.images:
             self._instantiate(image, self._import_col, parent_obj=None, world_matrix=flat_world)
+
+    def _instantiate_collection(
+        self,
+        instance,
+        collection: "bpy.types.Collection",
+        inherited_material_id: int | None = None,
+        active_definition_ids: tuple[int, ...] = (),
+    ) -> Optional["bpy.types.Object"]:
+        """Create one Blender collection instance for a reusable SKP definition."""
+        definition = self._definition_map.get(instance.definition_id)
+        self._reject_component_cycle(definition, instance.definition_id, active_definition_ids)
+        if definition is None:
+            return None
+        own_material_id = getattr(instance, "material_id", None)
+        material_id = own_material_id if own_material_id is not None else inherited_material_id
+        definition_collection = self._get_or_build_definition_collection(
+            definition,
+            material_id,
+            (*active_definition_ids, instance.definition_id),
+        )
+        name = instance.name or definition.name or f"Instance_{instance.id}"
+        obj = bpy.data.objects.new(name, None)
+        obj.instance_type = "COLLECTION"
+        obj.instance_collection = definition_collection
+        obj.empty_display_type = "PLAIN_AXES"
+        obj.empty_display_size = 0.1
+        obj.matrix_world = self._transform_to_matrix(instance.transform)
+        collection.objects.link(obj)
+        self.created_objects.append(obj)
+        return obj
+
+    def _get_or_build_definition_collection(
+        self,
+        definition,
+        inherited_material_id: int | None,
+        active_definition_ids: tuple[int, ...],
+    ) -> "bpy.types.Collection":
+        """Build one reusable collection for a definition/material variant."""
+        cache_key = (definition.id, inherited_material_id)
+        cached = self._bl_definition_collections.get(cache_key)
+        if cached is not None:
+            return cached
+
+        suffix = f":{inherited_material_id}" if inherited_material_id is not None else ""
+        collection = bpy.data.collections.new(f"SKP:{definition.name}{suffix}")
+        self._bl_definition_collections[cache_key] = collection
+        material = self._bl_materials.get(inherited_material_id) if inherited_material_id is not None else None
+        mesh = self._get_or_build_mesh(definition, inherited_material_id)
+        if mesh is not None:
+            mesh_obj = bpy.data.objects.new(f"{definition.name}:geometry", mesh)
+            collection.objects.link(mesh_obj)
+            self._apply_material_override(mesh_obj, material)
+
+        created_start = len(self.created_objects)
+        self._build_construction_entities(definition.entities, collection)
+        self._build_annotation_entities(definition.entities, collection)
+        del self.created_objects[created_start:]
+
+        for child in (
+            *definition.entities.groups,
+            *definition.entities.component_instances,
+            *definition.entities.images,
+        ):
+            child_definition = self._definition_map.get(child.definition_id)
+            self._reject_component_cycle(child_definition, child.definition_id, active_definition_ids)
+            if child_definition is None:
+                continue
+            own_material_id = getattr(child, "material_id", None)
+            material_id = own_material_id if own_material_id is not None else inherited_material_id
+            child_collection = self._get_or_build_definition_collection(
+                child_definition,
+                material_id,
+                (*active_definition_ids, child.definition_id),
+            )
+            name = child.name or child_definition.name or f"Instance_{child.id}"
+            child_obj = bpy.data.objects.new(name, None)
+            child_obj.instance_type = "COLLECTION"
+            child_obj.instance_collection = child_collection
+            child_obj.empty_display_type = "PLAIN_AXES"
+            child_obj.empty_display_size = 0.1
+            child_obj.matrix_world = self._transform_to_matrix(child.transform)
+            collection.objects.link(child_obj)
+        return collection
 
     def _build_root_construction(self) -> None:
         """Create root-level guides and section planes."""
