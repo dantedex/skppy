@@ -74,6 +74,7 @@ def test_built_addon_bundles_complete_legacy_parser(tmp_path, monkeypatch):
     assert all("\\" not in name for name in expected_parser_files)
     assert absolute_internal_imports == set()
     assert "skppy/loader.py" in bundled_files
+    assert "skppy/material_loader.py" in bundled_files
     assert "export_builder.py" in bundled_files
     assert "operators/export_skp.py" in bundled_files
     assert b"skppy.__version__ = _bundled_skppy_version" in addon_entrypoint

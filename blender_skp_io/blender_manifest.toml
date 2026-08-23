@@ -4,8 +4,8 @@ id = "blender_skp_io"
 # Replaced from the nearest Git tag by build_blender_addon.py during packaging.
 # Keep this placeholder valid so Blender can still read the source checkout.
 version = "0.0.0"
-name = "SketchUp IO (.skp)"
-tagline = "Import and export SketchUp .skp files (no SDK required)"
+name = "SketchUp IO (.skp/.skm)"
+tagline = "Import SKP and SKM files and export SKP files without the SDK"
 maintainer = "Dante Dex <dante.dex.arch@gmail.com>"
 type = "add-on"
 
@@ -15,4 +15,4 @@ license = ["SPDX:MIT"]
 category = "Import-Export"
 
 [permissions]
-files = "Read and write SKP files and access linked texture images"
+files = "Read SKP and SKM files, write SKP files, and access linked texture images"

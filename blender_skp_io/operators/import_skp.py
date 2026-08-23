@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: MIT
 """
-IMPORT_OT_skp -- Blender operator for importing SketchUp .skp files.
+IMPORT_OT_skp -- Blender operator for importing SketchUp .skp and .skm files.
 """
 
 from __future__ import annotations
@@ -18,15 +18,15 @@ from .. import skppy
 
 
 class IMPORT_OT_skp(Operator, ImportHelper):
-    """Import a SketchUp .skp file as a Blender scene"""
+    """Import a SketchUp model or standalone material"""
 
     bl_idname = "import_scene.skp"
-    bl_label = "Import SketchUp (.skp)"
+    bl_label = "Import SketchUp (.skp/.skm)"
     bl_options = {"REGISTER", "UNDO"}  # noqa: RUF012
 
     # ImportHelper provides the 'filepath' property via the mixin
     filename_ext = ".skp"
-    filter_glob: StringProperty(default="*.skp", options={"HIDDEN"}, maxlen=255)
+    filter_glob: StringProperty(default="*.skp;*.skm", options={"HIDDEN"}, maxlen=255)
 
     scale: FloatProperty(
         name="Scale",
@@ -143,7 +143,7 @@ class IMPORT_OT_skp(Operator, ImportHelper):
 
         if outcome == "error":
             self._finish_progress(context)
-            self.report({"ERROR"}, f"Failed to parse .skp file: {payload}")
+            self.report({"ERROR"}, f"Failed to parse SketchUp file: {payload}")
             return {"CANCELLED"}
         if outcome == "cancelled":
             self._finish_progress(context)
@@ -151,11 +151,16 @@ class IMPORT_OT_skp(Operator, ImportHelper):
             return {"CANCELLED"}
 
         try:
-            self._update_progress(context, 50.0, "Building Blender scene")
-            builder = self._build_scene(context, payload)
-            result = self._finish_import(context, builder)
+            if outcome == "material":
+                self._update_progress(context, 75.0, "Building Blender material")
+                bl_mat = self._build_material(payload)
+                result = self._finish_material_import(bl_mat)
+            else:
+                self._update_progress(context, 50.0, "Building Blender scene")
+                builder = self._build_scene(context, payload)
+                result = self._finish_import(context, builder)
         except Exception as exc:
-            self.report({"ERROR"}, f"Failed to build Blender scene: {exc}")
+            self.report({"ERROR"}, f"Failed to build Blender data: {exc}")
             result = {"CANCELLED"}
         finally:
             self._finish_progress(context)
@@ -191,16 +196,33 @@ class IMPORT_OT_skp(Operator, ImportHelper):
     def _parse_worker(filepath, import_vray_materials, results, cancel_event) -> None:
         """Parse without touching Blender data and publish one worker outcome."""
         try:
-            model = skppy.load(
+            outcome = IMPORT_OT_skp._load_source(
                 filepath,
                 cancellation_check=cancel_event.is_set,
                 import_vray_materials=import_vray_materials,
             )
-            results.put(("model", model))
+            results.put(outcome)
         except skppy.LoadCancelledError:
             results.put(("cancelled", None))
         except Exception as exc:
             results.put(("error", exc))
+
+    @staticmethod
+    def _load_source(filepath, *, cancellation_check=None, import_vray_materials=False):
+        """Load a model or material package, including incorrectly named SKM files."""
+        try:
+            model = skppy.load(
+                filepath,
+                cancellation_check=cancellation_check,
+                import_vray_materials=import_vray_materials,
+            )
+            return "model", model
+        except skppy.InvalidSkpError as model_error:
+            try:
+                material = skppy.load_material(filepath, import_vray_materials=import_vray_materials)
+            except skppy.InvalidSkmError:
+                raise model_error
+            return "material", material
 
     def _request_cancellation(self) -> None:
         """Signal the cooperative parser scope owned by this operator."""
@@ -213,21 +235,39 @@ class IMPORT_OT_skp(Operator, ImportHelper):
         self._begin_progress(context, "Parsing SketchUp file")
 
         try:
-            model = skppy.load(self.filepath, import_vray_materials=self.import_vray_materials)
+            outcome, payload = self._load_source(self.filepath, import_vray_materials=self.import_vray_materials)
         except Exception as exc:
             self._finish_progress(context)
-            self.report({"ERROR"}, f"Failed to parse .skp file: {exc}")
+            self.report({"ERROR"}, f"Failed to parse SketchUp file: {exc}")
             return {"CANCELLED"}
 
         try:
+            if outcome == "material":
+                self._update_progress(context, 75.0, "Building Blender material")
+                bl_mat = self._build_material(payload)
+                return self._finish_material_import(bl_mat)
             self._update_progress(context, 50.0, "Building Blender scene")
-            builder = self._build_scene(context, model)
+            builder = self._build_scene(context, payload)
             return self._finish_import(context, builder)
         except Exception as exc:
-            self.report({"ERROR"}, f"Failed to build Blender scene: {exc}")
+            self.report({"ERROR"}, f"Failed to build Blender data: {exc}")
             return {"CANCELLED"}
         finally:
             self._finish_progress(context)
+
+    @staticmethod
+    def _build_material(material):
+        """Create a persistent Blender data-block for a standalone material."""
+        from ..scene_builder import BlenderSceneBuilder
+
+        bl_mat = BlenderSceneBuilder.build_material(material)
+        bl_mat.use_fake_user = True
+        return bl_mat
+
+    def _finish_material_import(self, bl_mat):
+        """Report a completed standalone material import."""
+        self.report({"INFO"}, f"Imported material {bl_mat.name!r} from {self.filepath}")
+        return {"FINISHED"}
 
     def _build_scene(self, context, model):
         """Build Blender data on the main thread and return the scene builder."""

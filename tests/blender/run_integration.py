@@ -5,9 +5,11 @@ from __future__ import annotations
 
 import argparse
 import importlib
+import io
 import math
 import struct
 import sys
+import zipfile
 import zlib
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -39,6 +41,33 @@ def _png_rgba(alpha: int) -> bytes:
     header = struct.pack(">IIBBBBB", 1, 1, 8, 6, 0, 0, 0)
     pixels = zlib.compress(bytes((0, 220, 120, 40, alpha)))
     return signature + chunk(b"IHDR", header) + chunk(b"IDAT", pixels) + chunk(b"IEND", b"")
+
+
+def _material_package_bytes(name: str) -> bytes:
+    """Return a standalone textured SketchUp material package."""
+    xml = f"""<?xml version="1.0" encoding="UTF-8"?>
+<materialDocument xmlns="http://sketchup.google.com/schemas/sketchup/1.0/material"
+                  xmlns:mat="http://sketchup.google.com/schemas/sketchup/1.0/material">
+  <mat:material name="{name}" colorRed="10" colorGreen="20" colorBlue="30"
+                useTrans="1" trans="0.25" hasTexture="1">
+    <mat:texture textureFilename="standalone.png" xScale="12.5" yScale="25">
+      <mat:images><mat:image path="texture.png" file_name="standalone.png" /></mat:images>
+    </mat:texture>
+  </mat:material>
+</materialDocument>"""
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w") as archive:
+        archive.writestr("document.xml", xml)
+        archive.writestr("ref/texture.png", _png_rgba(255))
+    return buffer.getvalue()
+
+
+def _classification_package_bytes() -> bytes:
+    """Return the unrelated ZIP payload found after some legacy models."""
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w") as archive:
+        archive.writestr("document.xml", "<classificationDocument/>")
+    return buffer.getvalue()
 
 
 def _install_extension(addon: Path) -> str:
@@ -774,14 +803,20 @@ def _run_fixture(fixture: Path, *, require_mesh: bool = True) -> None:
 
 
 def _run_automatic_dispatch(module_name: str) -> None:
-    """Load and import minimal modern and legacy containers without a selector."""
+    """Load and import models and materials without a format selector."""
     addon = importlib.import_module(module_name)
     with TemporaryDirectory(prefix="skppy-blender-dispatch-") as directory:
         fixtures = Path(directory)
         modern_path = fixtures / "modern.skp"
         legacy_path = fixtures / "legacy.skp"
+        hybrid_path = fixtures / "legacy-with-metadata.skp"
+        material_path = fixtures / "standalone.skm"
+        misnamed_material_path = fixtures / "misnamed-material.skp"
         modern_path.write_bytes(modern_zip_bytes())
         legacy_path.write_bytes(legacy_v8_bytes())
+        hybrid_path.write_bytes(legacy_v8_bytes() + _classification_package_bytes())
+        material_path.write_bytes(_material_package_bytes("Integration Standalone SKM"))
+        misnamed_material_path.write_bytes(_material_package_bytes("Integration Misnamed SKM"))
 
         modern = addon.skppy.load(modern_path)
         if modern.header is None or modern.header.version_tuple != (26, 0, 0):
@@ -795,10 +830,38 @@ def _run_automatic_dispatch(module_name: str) -> None:
         if legacy.legacy_archive is None:
             raise AssertionError("legacy fixture did not use the CArchive parser")
 
+        hybrid = addon.skppy.load(hybrid_path)
+        if hybrid.header is None or hybrid.header.version_tuple != (8, 0, 1):
+            raise AssertionError("legacy fixture with appended ZIP used the wrong parser")
+        try:
+            addon.skppy.load_material(hybrid_path)
+        except addon.skppy.InvalidSkmError:
+            pass
+        else:
+            raise AssertionError("legacy model metadata was mistaken for a material")
+
         _clear_scene()
         _run_fixture(modern_path, require_mesh=False)
         _clear_scene()
         _run_fixture(legacy_path, require_mesh=False)
+        _clear_scene()
+        _run_fixture(hybrid_path, require_mesh=False)
+
+        for path, name in (
+            (material_path, "Integration Standalone SKM"),
+            (misnamed_material_path, "Integration Misnamed SKM"),
+        ):
+            result = bpy.ops.import_scene.skp(filepath=str(path.resolve()))
+            if "FINISHED" not in result:
+                raise AssertionError(f"standalone material import did not finish: {result}")
+            material = bpy.data.materials.get(name)
+            if material is None or not material.use_fake_user:
+                raise AssertionError(f"standalone material was not retained: {name}")
+            _assert_close(material["skppy_x_scale"], 12.5, "standalone texture x scale")
+            _assert_close(material["skppy_y_scale"], 25.0, "standalone texture y scale")
+            bsdf = material.node_tree.nodes["Principled BSDF"]
+            if not _linked_from(bsdf.inputs["Base Color"], "ShaderNodeTexImage", "Color"):
+                raise AssertionError(f"standalone material texture was not linked: {name}")
 
 
 def main() -> None:

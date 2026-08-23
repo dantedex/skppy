@@ -171,29 +171,7 @@ class BlenderSceneBuilder:
     def _build_materials(self) -> None:
         material_count = len(self.model.materials)
         for material_index, mat in enumerate(self.model.materials, start=1):
-            # Reuse an existing Blender material with the same name so that
-            # re-importing the same file doesn't create "Name.001" duplicates.
-            bl_mat = bpy.data.materials.get(mat.name)
-            if bl_mat is None:
-                bl_mat = bpy.data.materials.new(name=mat.name)
-            bl_mat.use_nodes = True
-
-            bsdf = bl_mat.node_tree.nodes.get("Principled BSDF")
-            has_texture_alpha = False
-            if bsdf:
-                r = mat.color.r / 255.0
-                g = mat.color.g / 255.0
-                b = mat.color.b / 255.0
-                self._set_principled_input(bsdf, "Base Color", (r, g, b, 1.0))
-                self._set_principled_input(bsdf, "Alpha", mat.alpha)
-                self._set_principled_input(bsdf, "Metallic", mat.metallic)
-                self._set_principled_input(bsdf, "Roughness", mat.roughness)
-
-                if mat.has_texture and mat.texture and mat.texture.data:
-                    has_texture_alpha = self._attach_texture(bl_mat, mat.texture, alpha_factor=mat.alpha)
-
-            if mat.alpha < 1.0 or has_texture_alpha:
-                self._set_transparency_method(bl_mat)
+            bl_mat = self.build_material(mat)
 
             self._bl_materials[mat.id] = bl_mat
             self._bl_mat_by_name[mat.name] = bl_mat
@@ -207,6 +185,36 @@ class BlenderSceneBuilder:
 
         self._mat_by_id = {mat.id: mat for mat in self.model.materials}
 
+    @classmethod
+    def build_material(cls, mat) -> "bpy.types.Material":
+        """Create or update one Blender material from a skppy material."""
+        # Reuse by name so re-importing a source does not create ``.001``
+        # duplicates. This entry point also serves standalone SKM imports.
+        bl_mat = bpy.data.materials.get(mat.name)
+        if bl_mat is None:
+            bl_mat = bpy.data.materials.new(name=mat.name)
+        bl_mat.use_nodes = True
+
+        bsdf = bl_mat.node_tree.nodes.get("Principled BSDF")
+        has_texture_alpha = False
+        if bsdf:
+            r = mat.color.r / 255.0
+            g = mat.color.g / 255.0
+            b = mat.color.b / 255.0
+            cls._set_principled_input(bsdf, "Base Color", (r, g, b, 1.0))
+            cls._set_principled_input(bsdf, "Alpha", mat.alpha)
+            cls._set_principled_input(bsdf, "Metallic", mat.metallic)
+            cls._set_principled_input(bsdf, "Roughness", mat.roughness)
+
+            if mat.has_texture and mat.texture and mat.texture.data:
+                has_texture_alpha = cls._attach_texture(bl_mat, mat.texture, alpha_factor=mat.alpha)
+                bl_mat["skppy_x_scale"] = mat.texture.x_scale
+                bl_mat["skppy_y_scale"] = mat.texture.y_scale
+
+        if mat.alpha < 1.0 or has_texture_alpha:
+            cls._set_transparency_method(bl_mat)
+        return bl_mat
+
     def _get_default_material(self) -> "bpy.types.Material":
         """Return a shared neutral gray material used as the slot-0 placeholder."""
         name = "SKP Default"
@@ -219,8 +227,9 @@ class BlenderSceneBuilder:
                 bsdf.inputs["Base Color"].default_value = (0.8, 0.8, 0.8, 1.0)
         return mat
 
+    @classmethod
     def _attach_texture(
-        self,
+        cls,
         bl_mat: bpy.types.Material,
         texture,
         alpha_factor: float = 1.0,
@@ -263,8 +272,8 @@ class BlenderSceneBuilder:
 
         bsdf = nodes.get("Principled BSDF")
         if bsdf:
-            self._link_principled_input(links, tex_node.outputs.get("Color"), bsdf, "Base Color")
-            self._link_texture_alpha(
+            cls._link_principled_input(links, tex_node.outputs.get("Color"), bsdf, "Base Color")
+            cls._link_texture_alpha(
                 nodes,
                 links,
                 tex_node.outputs.get("Alpha"),
@@ -272,7 +281,7 @@ class BlenderSceneBuilder:
                 alpha_factor,
             )
 
-        return self._image_uses_alpha(image)
+        return cls._image_uses_alpha(image)
 
     @staticmethod
     def _set_principled_input(

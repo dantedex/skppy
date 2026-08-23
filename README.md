@@ -17,9 +17,10 @@ Windows. The Blender addon requires Blender 4.2 or newer; its headless
 integration suite runs against Blender 4.5 LTS and Blender 5.2 LTS.
 
 In addition to the `skppy` library, this repo contains a self-contained Blender
-addon for importing and exporting `.skp` files. The addon converts geometry,
-reusable components, collection instances, materials/textures, UVs, tags,
-cameras/scenes, text annotations, and scalar custom properties.
+addon for importing and exporting `.skp` files and importing standalone `.skm`
+materials. The addon converts geometry, reusable components, collection
+instances, materials/textures, UVs, tags, cameras/scenes, text annotations, and
+scalar custom properties.
 
 ## Documentation
 
@@ -49,7 +50,7 @@ Documentation sources live in [`docs/`](docs/). Build the current sources with
 - **Parse** environment data, sun data, options manager, attribute dictionaries
 - **Triangulate** faces with holes, or split single-hole faces into two n-gons
 - **Builder and writer API** for modern models and SketchUp Make 2017 geometry
-- **Blender addon** for importing and exporting `.skp` files through Blender's File menu
+- **Blender addon** for importing `.skp`/`.skm` and exporting `.skp` through Blender's File menu
 
 ## Quick Start
 

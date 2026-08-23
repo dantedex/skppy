@@ -1,18 +1,18 @@
 # SPDX-License-Identifier: MIT
 """
-blender_skp_io -- Blender addon for importing and exporting SketchUp .skp files.
+blender_skp_io -- Blender addon for SketchUp .skp IO and .skm material import.
 
 skppy is bundled inside this addon (under skppy/) and does not need to be
 installed separately in Blender's Python environment.
 """
 
 bl_info = {
-    "name": "SketchUp IO (.skp)",
+    "name": "SketchUp IO (.skp/.skm)",
     "author": "Dante Dex",
     "version": (0, 8, 0),
     "blender": (4, 2, 0),
-    "location": "File > Import/Export > SketchUp (.skp)",
-    "description": "Import and export SketchUp .skp files without the SDK",
+    "location": "File > Import/Export > SketchUp (.skp/.skm)",
+    "description": "Import SketchUp .skp/.skm files and export .skp files without the SDK",
     "category": "Import-Export",
     "doc_url": "https://dantedex.github.io/skppy/",
     "tracker_url": "https://github.com/dantedex/skppy/issues",
@@ -37,7 +37,7 @@ _CLASSES = [
 
 
 def _menu_func_import(self, context):
-    self.layout.operator(IMPORT_OT_skp.bl_idname, text="SketchUp (.skp)")
+    self.layout.operator(IMPORT_OT_skp.bl_idname, text="SketchUp (.skp/.skm)")
 
 
 def _menu_func_export(self, context):

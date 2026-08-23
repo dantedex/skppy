@@ -10,6 +10,14 @@ the project uses semantic versioning while the public API remains pre-1.0.
 - Load standalone SketchUp material packages through `load_material()`, using
   content-based detection for both `.skm` files and mislabeled `.skp`
   downloads, with embedded base textures and opt-in V-Ray PBR values.
+- Import standalone `.skm` materials in Blender, including mislabeled `.skp`
+  downloads, packed textures, physical texture scale, and persistent data-blocks.
+
+### Fixed
+
+- Dispatch legacy CArchive models with appended classification ZIP metadata to
+  the legacy parser instead of mistaking them for modern ZIP-based models.
+- Reject unrelated SKP classification documents as standalone materials.
 
 ## 0.9.1 - 2026-08-10
 

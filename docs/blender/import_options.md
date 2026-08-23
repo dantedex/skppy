@@ -1,7 +1,14 @@
 # Import Options
 
 Full reference for every option in the SketchUp import dialog
-(**File -> Import -> SketchUp (.skp)**).
+(**File -> Import -> SketchUp (.skp/.skm)**).
+
+The importer accepts both model files and standalone SketchUp material
+packages. A standalone `.skm` creates a Blender material data-block, packs its
+embedded texture, preserves its physical texture scale in the
+`skppy_x_scale`/`skppy_y_scale` custom properties, and enables Fake User so it
+survives saving even before it is assigned to an object. Package contents are
+authoritative, so downloaded SKM packages incorrectly named `.skp` also work.
 
 Options that affect collections and object parenting are illustrated together
 in [Imported Scene Organization](scene_organization.md).
@@ -73,7 +80,9 @@ remain split, Blender cannot interpolate normals across adjacent faces.
 **Type:** Boolean
 **Default:** `True`
 
-Create Blender materials from the SKP material definitions.
+Create Blender materials from the SKP material definitions. Standalone SKM
+imports always create their requested material; this switch only controls
+materials that accompany a model.
 
 Each material uses a **Principled BSDF** node tree:
 
@@ -112,9 +121,10 @@ values. This preserves the appearance shown by SketchUp.
 counterparts when present. Texture and other unsupported V-Ray graph inputs
 continue to fall back to the SketchUp material.
 
-This option affects material parsing even when **Import Materials** is disabled,
-but the parsed materials are only created in Blender when **Import Materials**
-is enabled.
+This option affects material parsing even when **Import Materials** is disabled.
+For a model, parsed materials are only created when **Import Materials** is
+enabled. A standalone SKM is itself the requested material and is always
+created.
 
 ---
 

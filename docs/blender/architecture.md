@@ -170,10 +170,12 @@ font family names are not resolved to operating-system font files automatically.
 
 ## Material creation
 
-`_build_materials()` iterates `model.materials`:
+`BlenderSceneBuilder.build_material()` converts one skppy material and is used
+both by standalone SKM imports and by `_build_materials()`, which iterates
+`model.materials`:
 
-- Skips materials already present in `bpy.data.materials` by name (idempotent).
-- Creates a new `bpy.data.materials.new(name)`.
+- Reuses and updates materials already present in `bpy.data.materials` by name.
+- Creates a new `bpy.data.materials.new(name)` when needed.
 - Enables `use_nodes = True` and sets up a **Principled BSDF** node tree.
 - Maps `color`, `alpha`, `metallic`, `roughness` to the BSDF inputs.
 - For textured materials:
@@ -182,7 +184,15 @@ font family names are not resolved to operating-system font files automatically.
   3. Packs the image into the `.blend` with `image.pack()`.
   4. Deletes the temp file.
   5. Connects an `Image Texture` node to the BSDF Base Color and Alpha.
+  6. Preserves the physical texture dimensions in the `skppy_x_scale` and
+     `skppy_y_scale` custom properties.
 - Sets `surface_render_method = "DITHERED"` (Blender 4.2+) or `blend_method = "HASHED"` when transparency is needed, falling back to `BLEND` only when the dithered option is unavailable.
+
+The import operator first attempts model loading, then falls back to standalone
+material loading only when the input is not a valid SKP model. This also
+supports SKM downloads carrying a `.skp` filename. Standalone materials enable
+Blender's Fake User flag because they are intentionally created without an
+object assignment.
 
 ---
 
