@@ -28,12 +28,12 @@ def load_material(
     filepath : str or os.PathLike
         Path to a SketchUp material ZIP containing ``document.xml``.
     import_vray_materials : bool, optional
-        Prefer supported V-Ray PBR values embedded in the material XML.
+        Prefer supported V-Ray and Enscape PBR values embedded in the material XML.
 
     Returns
     -------
     Material
-        Material appearance and embedded base texture.
+        Material appearance, renderer parameters, and embedded textures.
 
     Raises
     ------

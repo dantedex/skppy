@@ -99,6 +99,16 @@ class Material:
         Tangent-space normal map strength. Default 1.0.
     displacement_scale : float, optional
         Displacement amount. Default 0.0.
+    metallic_texture : Texture or None, optional
+        Non-color metallic map.
+    roughness_texture : Texture or None, optional
+        Non-color roughness map.
+    bump_texture : Texture or None, optional
+        Grayscale height map used for bump shading.
+    normal_texture : Texture or None, optional
+        Tangent-space normal map.
+    displacement_texture : Texture or None, optional
+        Grayscale displacement/height map.
 
     Examples
     --------

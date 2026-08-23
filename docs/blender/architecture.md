@@ -177,7 +177,8 @@ both by standalone SKM imports and by `_build_materials()`, which iterates
 - Reuses and updates materials already present in `bpy.data.materials` by name.
 - Creates a new `bpy.data.materials.new(name)` when needed.
 - Enables `use_nodes = True` and sets up a **Principled BSDF** node tree.
-- Maps `color`, `alpha`, `metallic`, `roughness` to the BSDF inputs.
+- Maps base colour, alpha, metallic, roughness, specular/IOR, and emission to
+  compatible Principled BSDF inputs in Blender 4.5 and 5.2.
 - For textured materials:
   1. Writes texture bytes to a temporary file.
   2. Loads the image with `bpy.data.images.load(temp_path)`.
@@ -186,6 +187,11 @@ both by standalone SKM imports and by `_build_materials()`, which iterates
   5. Connects an `Image Texture` node to the BSDF Base Color and Alpha.
   6. Preserves the physical texture dimensions in the `skppy_x_scale` and
      `skppy_y_scale` custom properties.
+- Loads embedded metallic, roughness, normal, bump, and displacement maps as
+  Non-Color images and connects the corresponding adjustment and shader nodes.
+- Retains renderer scalars and every auxiliary map basename as `skppy_*`
+  material custom properties, including references whose pixels were not
+  embedded in the SKM archive.
 - Sets `surface_render_method = "DITHERED"` (Blender 4.2+) or `blend_method = "HASHED"` when transparency is needed, falling back to `BLEND` only when the dithered option is unavailable.
 
 The import operator first attempts model loading, then falls back to standalone

@@ -5,6 +5,21 @@ the project uses semantic versioning while the public API remains pre-1.0.
 
 ## Unreleased
 
+### Added
+
+- Import opt-in Enscape PBR metadata from standalone SKM packages and modern
+  model materials, including metallic, roughness, specular, IOR, emission,
+  bump, normal, displacement, map brightness, and map inversion values.
+- Build Blender Principled material nodes for embedded metallic, roughness,
+  normal, bump, and displacement maps while preserving missing external map
+  references as material custom properties.
+
+### Changed
+
+- Broaden the Blender `Use V-Ray Materials` option to `Use Render Materials`;
+  the compatible `import_vray_materials` property now enables both V-Ray and
+  Enscape metadata.
+
 ### Fixed
 
 - Build versioned documentation for release tags without starting a duplicate

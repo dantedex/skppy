@@ -92,7 +92,16 @@ Each material uses a **Principled BSDF** node tree:
 | `alpha` | Alpha |
 | `metallic` | Metallic |
 | `roughness` | Roughness |
+| `specular` | IOR Level / Specular IOR Level |
+| `ior` | IOR |
+| `emission_color` | Emission Color |
+| `emission_strength` | Emission Strength |
 | `texture.data` | Image Texture node (packed into the .blend) |
+| `metallic_texture.data` | Non-Color Image Texture -> Metallic |
+| `roughness_texture.data` | Non-Color Image Texture -> Roughness |
+| `normal_texture.data` | Non-Color Image Texture -> Normal Map -> Normal |
+| `bump_texture.data` | Non-Color Image Texture -> Bump -> Normal |
+| `displacement_texture.data` | Non-Color Image Texture -> Displacement -> Material Output |
 
 Transparent materials (`alpha < 1.0`) use:
 - Blender 4.2+: `material.surface_render_method = "DITHERED"`
@@ -103,23 +112,32 @@ quick mesh inspection without shader overhead.
 
 ---
 
-## Use V-Ray Materials
+## Use Render Materials
 
 **Property:** `import_vray_materials`
 **Type:** Boolean
 **Default:** `False`
 
-Prefer PBR appearance values stored by V-Ray when a material contains supported
-V-Ray metadata. Currently this includes diffuse colour, metallic, and roughness
-values from V-Ray material graphs. Materials without supported V-Ray metadata
-continue to use their SketchUp appearance.
+Prefer PBR appearance values stored by V-Ray or Enscape when a material contains
+supported renderer metadata. The importer reads diffuse colour, metallic,
+roughness, specular level, IOR, emission, bump strength, normal intensity,
+displacement scale, and referenced PBR texture slots. Materials without
+supported renderer metadata continue to use their SketchUp appearance.
 
 **Disable** (default): Use SketchUp colour, texture, opacity, and native PBR
 values. This preserves the appearance shown by SketchUp.
 
-**Enable**: Override supported SketchUp appearance values with their V-Ray PBR
-counterparts when present. Texture and other unsupported V-Ray graph inputs
-continue to fall back to the SketchUp material.
+**Enable**: Override supported SketchUp appearance values with renderer PBR
+counterparts when present. Embedded maps are packed into the `.blend`, marked
+as Non-Color data, and connected to the Principled material. Source inversion
+and brightness values are included in scalar map node chains.
+
+Many third-party SKM packages store only an absolute path such as `C:\maps\normal.jpg`
+for auxiliary maps while embedding only the base-colour image. The importer
+never reads that external path. It preserves the basename in a Blender material
+custom property such as `skppy_normal_texture` or `skppy_roughness_texture`, but
+cannot create an image node without image bytes. Put the map inside the SKM ZIP
+to make it portable.
 
 This option affects material parsing even when **Import Materials** is disabled.
 For a model, parsed materials are only created when **Import Materials** is
