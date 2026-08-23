@@ -107,6 +107,21 @@ def test_uses_scalar_fallbacks_when_vray_parameters_reference_textures() -> None
     assert material.color == skppy.Color(10, 20, 30)
 
 
+def test_preserves_enscape_roughness_when_vray_parameter_references_its_texture() -> None:
+    plugins = [
+        _plugin(
+            "/Material",
+            "BRDFVRayMtl",
+            {"option_use_roughness": "1", "reflect_glossiness": "/Roughness"},
+            {"reflect_glossiness_float": "0"},
+        ),
+    ]
+    material = skppy.Material(roughness=0.72, roughness_texture=skppy.Texture(filename="roughness.jpg"))
+
+    assert apply_vray_attribute_dictionaries(material, _dictionaries("/Material", plugins))
+    assert material.roughness == pytest.approx(0.72)
+
+
 def test_resolves_wrapped_and_layered_vray_material_graph() -> None:
     plugins = [
         _plugin("/Material", "MtlSingleBRDF", {"brdf": "/Stats"}),

@@ -76,6 +76,7 @@ from ..data_structure.images import Texture, normalize_texture_scale
 from ..data_structure.materials import Color, Material
 from ..data_structure.model_metadata import AttributeDictionary
 from .attributes import parse_entity_attribute_dictionaries
+from .enscape_materials import apply_enscape_xml
 from .tlv import (
     TlvTag,
     find_child,
@@ -380,6 +381,18 @@ def _parse_material_xml(
         )
     _apply_pbr_xml(candidate, mat_el, ns)
     if import_vray_materials:
+        def resolve_texture(filename: str, brightness: float, inverted: bool) -> Texture:
+            return _resolve_renderer_texture(
+                filename,
+                brightness,
+                inverted,
+                candidate,
+                zip_file,
+                zip_name_map or {},
+                image_directory=image_directory,
+            )
+
+        apply_enscape_xml(candidate, mat_el, parse_xml=_parse_bounded_xml, resolve_texture=resolve_texture)
         apply_vray_xml(candidate, mat_el)
 
     if target is not None:
@@ -436,6 +449,37 @@ def _parse_texture_xml(
             logger.debug("Texture file not found in ZIP: %s", fallback_path)
     if texture.filename:
         texture.filename = os.path.basename(texture.filename.replace("\\", "/"))
+    return texture
+
+
+def _resolve_renderer_texture(
+    filename: str,
+    brightness: float,
+    inverted: bool,
+    material: Material,
+    zip_file: zipfile.ZipFile,
+    zip_name_map: Mapping[str, str],
+    *,
+    image_directory: str | None,
+) -> Texture:
+    """Resolve a renderer map only from safe entries inside the material archive."""
+    basename = os.path.basename(filename.replace("\\", "/"))
+    base_texture = material.texture
+    texture = Texture(
+        filename=basename,
+        x_scale=base_texture.x_scale if base_texture is not None else 1.0,
+        y_scale=base_texture.y_scale if base_texture is not None else 1.0,
+        brightness=brightness,
+        inverted=inverted,
+    )
+    corrected_names = {**{name: name for name in zip_file.namelist()}, **zip_name_map}
+    matching_paths = sorted(
+        corrected for corrected in corrected_names if os.path.basename(corrected).casefold() == basename.casefold()
+    )
+    preferred_directory = image_directory.rstrip("/") + "/" if image_directory else ""
+    matching_paths.sort(key=lambda path: (not path.startswith(preferred_directory), path))
+    if matching_paths:
+        texture.data = _zip_read(zip_file, matching_paths[0], zip_name_map)
     return texture
 
 

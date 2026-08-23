@@ -51,6 +51,10 @@ class Texture:
         Height of one texture tile in inches. Default 1.0.
     data : bytes or None, optional
         Raw image bytes (JPEG, PNG, etc.). ``None`` if not extracted.
+    brightness : float, optional
+        Source renderer's texture multiplier. Default 1.0.
+    inverted : bool, optional
+        Whether the source renderer inverts the texture values.
 
     Examples
     --------
@@ -65,6 +69,8 @@ class Texture:
     x_scale: float = 1.0
     y_scale: float = 1.0
     data: Optional[bytes] = None
+    brightness: float = 1.0
+    inverted: bool = False
 
     def __post_init__(self) -> None:
         """Keep newly constructed textures safe for immediate UV evaluation."""
