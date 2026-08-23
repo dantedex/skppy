@@ -39,7 +39,7 @@ docstrings:
 	$(PYTHON) -m pydocstyle skppy
 
 quality:
-	$(PYTHON) -m ruff format --check skppy blender_skp_io tests build_blender_addon.py
-	$(PYTHON) -m ruff check skppy blender_skp_io tests build_blender_addon.py
+	$(PYTHON) -m ruff format --check skppy blender_skp_io tests build_blender_addon.py build_release_notes.py
+	$(PYTHON) -m ruff check skppy blender_skp_io tests build_blender_addon.py build_release_notes.py
 	$(PYTHON) -m mypy skppy
 	$(MAKE) docstrings

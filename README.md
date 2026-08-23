@@ -110,7 +110,8 @@ Run the isolated Blender extension integration with `make test-blender`.
 
 Release notes are maintained in [CHANGELOG.md](CHANGELOG.md). Version tags
 build and test both the Python distribution and bundled Blender extension
-before publishing their artifacts.
+before publishing their artifacts. The repository changelog retains the full
+history, while each GitHub Release displays only its matching version section.
 
 ## Project
 

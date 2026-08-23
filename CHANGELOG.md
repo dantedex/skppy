@@ -15,6 +15,8 @@ the project uses semantic versioning while the public API remains pre-1.0.
 
 ### Fixed
 
+- Limit each GitHub Release body to the matching tagged section while retaining
+  the complete project history in `CHANGELOG.md`.
 - Dispatch legacy CArchive models with appended classification ZIP metadata to
   the legacy parser instead of mistaking them for modern ZIP-based models.
 - Reject unrelated SKP classification documents as standalone materials.

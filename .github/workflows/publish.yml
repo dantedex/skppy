@@ -188,10 +188,13 @@ jobs:
         with:
           path: artifacts/
 
+      - name: Extract notes for this release
+        run: python build_release_notes.py "${GITHUB_REF_NAME}" --output release-notes.md
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v3
         with:
-          body_path: CHANGELOG.md
+          body_path: release-notes.md
           files: |
             artifacts/dist/*
             artifacts/blender-skp-io-addon/*.zip
