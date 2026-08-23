@@ -381,6 +381,7 @@ def _parse_material_xml(
         )
     _apply_pbr_xml(candidate, mat_el, ns)
     if import_vray_materials:
+
         def resolve_texture(filename: str, brightness: float, inverted: bool) -> Texture:
             return _resolve_renderer_texture(
                 filename,

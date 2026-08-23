@@ -40,12 +40,12 @@ def test_rejects_absent_malformed_and_unrelated_enscape_metadata(metadata: str |
     assert material == skppy.Material()
 
 
-@pytest.mark.parametrize("emission_color", ["#123", "#GG0000"])
-def test_safely_defaults_invalid_enscape_fields(emission_color: str) -> None:
+@pytest.mark.parametrize(("emission_color", "relief_type"), [("#123", "BUMP"), ("#GG0000", "UNKNOWN")])
+def test_safely_defaults_invalid_enscape_fields(emission_color: str, relief_type: str) -> None:
     metadata = f"""<SketchupMaterial>
       <Metallic>nan</Metallic><Roughness>bad</Roughness><Specular>2</Specular>
       <IndexOfRefraction>0</IndexOfRefraction><EmissiveColor>{emission_color}</EmissiveColor>
-      <BumpAmount>-2</BumpAmount><NormalMapIntensity>-3</NormalMapIntensity><BumpMapType>BUMP</BumpMapType>
+      <BumpAmount>-2</BumpAmount><NormalMapIntensity>-3</NormalMapIntensity><BumpMapType>{relief_type}</BumpMapType>
       <BumpTexture><Filepath/></BumpTexture>
     </SketchupMaterial>"""
     material = skppy.Material(metallic=0.2, roughness=0.3, emission_color=skppy.Color(1, 2, 3))
@@ -61,6 +61,6 @@ def test_safely_defaults_invalid_enscape_fields(emission_color: str) -> None:
     )
     assert material.emission_color == skppy.Color(1, 2, 3)
     assert (material.emission_strength, material.bump_strength, material.normal_scale) == pytest.approx((0, 0, 0))
-    assert material.bump_map_type == "BUMP"
+    assert material.bump_map_type == ("BUMP" if relief_type == "BUMP" else "NONE")
     assert material.bump_texture is None
     assert material.roughness_texture is None

@@ -10,8 +10,6 @@ from collections.abc import Callable
 from ..data_structure.images import Texture
 from ..data_structure.materials import Color, Material
 
-_RELIEF_TYPES = {"BUMP", "NORMAL", "DISPLACEMENT"}
-
 
 def apply_enscape_xml(
     material: Material,
@@ -43,16 +41,20 @@ def apply_enscape_xml(
     material.normal_scale = max(0.0, _float(root, "NormalMapIntensity", material.normal_scale))
 
     relief_type = _text(root, "BumpMapType").upper()
-    material.bump_map_type = relief_type if relief_type in _RELIEF_TYPES else "NONE"
     material.roughness_texture = _texture(root, "RoughnessTexture", resolve_texture)
     relief_texture = _texture(root, "BumpTexture", resolve_texture)
-    if material.bump_map_type == "BUMP":
+    if relief_type == "BUMP":
+        material.bump_map_type = "BUMP"
         material.bump_texture = relief_texture
-    elif material.bump_map_type == "NORMAL":
+    elif relief_type == "NORMAL":
+        material.bump_map_type = "NORMAL"
         material.normal_texture = relief_texture
-    elif material.bump_map_type == "DISPLACEMENT":
+    elif relief_type == "DISPLACEMENT":
+        material.bump_map_type = "DISPLACEMENT"
         material.displacement_texture = relief_texture
         material.displacement_scale = material.bump_strength
+    else:
+        material.bump_map_type = "NONE"
     return True
 
 
