@@ -14,13 +14,13 @@ ROOT = Path(__file__).resolve().parents[1]
 def test_extracts_only_requested_release_from_full_project_changelog() -> None:
     changelog = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
 
-    notes = extract_release_notes(changelog, "v0.9.1")
+    notes = extract_release_notes(changelog, "v0.10.0")
 
-    assert "Preserve door and window openings" in notes
-    assert "## 0.9.1" not in notes
+    assert "Load standalone SketchUp material packages" in notes
+    assert "## 0.10.0" not in notes
     assert "## Unreleased" not in notes
-    assert "## 0.9.0" not in notes
-    assert "Complete modern writer coverage" not in notes
+    assert "## 0.9.1" not in notes
+    assert "Preserve door and window openings" not in notes
     assert notes.endswith("\n")
 
 

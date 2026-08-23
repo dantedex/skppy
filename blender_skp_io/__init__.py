@@ -9,7 +9,7 @@ installed separately in Blender's Python environment.
 bl_info = {
     "name": "SketchUp IO (.skp/.skm)",
     "author": "Dante Dex",
-    "version": (0, 8, 0),
+    "version": (0, 10, 0),
     "blender": (4, 2, 0),
     "location": "File > Import/Export > SketchUp (.skp/.skm)",
     "description": "Import SketchUp .skp/.skm files and export .skp files without the SDK",

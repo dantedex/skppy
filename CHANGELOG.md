@@ -5,6 +5,8 @@ the project uses semantic versioning while the public API remains pre-1.0.
 
 ## Unreleased
 
+## 0.10.0 - 2026-08-23
+
 ### Added
 
 - Load standalone SketchUp material packages through `load_material()`, using

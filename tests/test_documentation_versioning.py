@@ -47,4 +47,4 @@ def test_readme_links_current_and_release_documentation() -> None:
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
 
     assert "https://dantedex.github.io/skppy/latest/" in readme
-    assert "https://dantedex.github.io/skppy/0.9.1/" in readme
+    assert "https://dantedex.github.io/skppy/0.10.0/" in readme
