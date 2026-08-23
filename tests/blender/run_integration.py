@@ -133,6 +133,12 @@ def _assert_materials(scene_builder) -> None:
     _assert_close(transparent_bsdf.inputs["Roughness"].default_value, 0.2, "roughness")
     _assert_close(opaque_bsdf.inputs["Metallic"].default_value, 0.1, "opaque metallic")
     _assert_close(opaque_bsdf.inputs["Roughness"].default_value, 0.8, "opaque roughness")
+    _assert_close(transparent_bsdf.inputs["IOR"].default_value, 1.61, "IOR")
+    specular_input = transparent_bsdf.inputs.get("IOR Level") or transparent_bsdf.inputs.get("Specular IOR Level")
+    if specular_input is None:
+        raise AssertionError("Principled BSDF has no supported specular input")
+    _assert_close(specular_input.default_value, 0.42, "specular")
+    _assert_close(transparent_bsdf.inputs["Emission Strength"].default_value, 2.5, "emission strength")
 
     if not _linked_from(transparent_bsdf.inputs["Base Color"], "ShaderNodeTexImage", "Color"):
         raise AssertionError("texture color is not connected to Principled Base Color")
@@ -140,6 +146,27 @@ def _assert_materials(scene_builder) -> None:
         raise AssertionError("material opacity is not multiplied by texture alpha")
     if not _linked_from(opaque_bsdf.inputs["Alpha"], "ShaderNodeTexImage", "Alpha"):
         raise AssertionError("opaque texture alpha is not connected to Principled Alpha")
+    if not _linked_from(transparent_bsdf.inputs["Metallic"], "ShaderNodeTexImage", "Color"):
+        raise AssertionError("metallic texture is not connected to Principled Metallic")
+    if not _linked_from(transparent_bsdf.inputs["Roughness"], "ShaderNodeMath", "Value"):
+        raise AssertionError("adjusted roughness texture is not connected to Principled Roughness")
+    if not _linked_from(transparent_bsdf.inputs["Normal"], "ShaderNodeBump", "Normal"):
+        raise AssertionError("bump and normal chain is not connected to Principled Normal")
+
+    bump = next((node for node in transparent.node_tree.nodes if node.bl_idname == "ShaderNodeBump"), None)
+    if bump is None or not _linked_from(bump.inputs["Normal"], "ShaderNodeNormalMap", "Normal"):
+        raise AssertionError("normal map is not chained through the bump node")
+    material_output = transparent.node_tree.nodes["Material Output"]
+    if not _linked_from(material_output.inputs["Displacement"], "ShaderNodeDisplacement", "Displacement"):
+        raise AssertionError("height map is not connected to Material Output Displacement")
+
+    for image_name in ("metallic.png", "roughness.png", "normal.png", "bump.png", "height.png"):
+        if bpy.data.images[image_name].colorspace_settings.name != "Non-Color":
+            raise AssertionError(f"{image_name} was not imported as non-color data")
+    if transparent["skppy_bump_map_type"] != "BUMP" or transparent["skppy_normal_scale"] != 0.83:
+        raise AssertionError("PBR scalar metadata was not preserved")
+    if opaque["skppy_roughness_texture"] != "missing-roughness.png":
+        raise AssertionError("missing renderer texture reference was not preserved")
 
     if hasattr(transparent, "surface_render_method"):
         if transparent.surface_render_method != "DITHERED":
@@ -176,6 +203,24 @@ def _run_synthetic(module_name: str) -> None:
         y_scale=4.0,
         data=_png_rgba(96),
     )
+    transparent.specular = 0.42
+    transparent.ior = 1.61
+    transparent.emission_color = skppy.Color(16, 32, 48)
+    transparent.emission_strength = 2.5
+    transparent.bump_map_type = "BUMP"
+    transparent.bump_strength = 0.64
+    transparent.normal_scale = 0.83
+    transparent.displacement_scale = 0.25
+    transparent.metallic_texture = skppy.Texture(filename="metallic.png", data=_png_rgba(255))
+    transparent.roughness_texture = skppy.Texture(
+        filename="roughness.png",
+        data=_png_rgba(255),
+        brightness=0.65,
+        inverted=True,
+    )
+    transparent.normal_texture = skppy.Texture(filename="normal.png", data=_png_rgba(255))
+    transparent.bump_texture = skppy.Texture(filename="bump.png", data=_png_rgba(255))
+    transparent.displacement_texture = skppy.Texture(filename="height.png", data=_png_rgba(255))
     opaque = model.add_material(
         "Integration Opaque",
         color=skppy.Color(220, 180, 140),
@@ -189,6 +234,7 @@ def _run_synthetic(module_name: str) -> None:
         y_scale=4.0,
         data=_png_rgba(255),
     )
+    opaque.roughness_texture = skppy.Texture(filename="missing-roughness.png")
 
     first = model.entities.add_face(
         ((0, 0, 0), (4, 0, 0), (4, 8, 0), (0, 8, 0)),

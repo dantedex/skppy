@@ -57,8 +57,8 @@ class IMPORT_OT_skp(Operator, ImportHelper):
     )
 
     import_vray_materials: BoolProperty(
-        name="Use V-Ray Materials",
-        description="Prefer V-Ray PBR values when present; otherwise use SketchUp material appearance",
+        name="Use Render Materials",
+        description="Prefer V-Ray and Enscape PBR values when present; otherwise use SketchUp material appearance",
         default=False,
     )
 

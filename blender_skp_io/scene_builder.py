@@ -205,11 +205,24 @@ class BlenderSceneBuilder:
             cls._set_principled_input(bsdf, "Alpha", mat.alpha)
             cls._set_principled_input(bsdf, "Metallic", mat.metallic)
             cls._set_principled_input(bsdf, "Roughness", mat.roughness)
+            cls._set_principled_input(bsdf, "IOR", mat.ior)
+            cls._set_first_principled_input(bsdf, ("IOR Level", "Specular IOR Level"), mat.specular)
+            emission = (
+                mat.emission_color.r / 255.0,
+                mat.emission_color.g / 255.0,
+                mat.emission_color.b / 255.0,
+                1.0,
+            )
+            cls._set_first_principled_input(bsdf, ("Emission Color", "Emission"), emission)
+            cls._set_principled_input(bsdf, "Emission Strength", mat.emission_strength)
 
             if mat.has_texture and mat.texture and mat.texture.data:
                 has_texture_alpha = cls._attach_texture(bl_mat, mat.texture, alpha_factor=mat.alpha)
                 bl_mat["skppy_x_scale"] = mat.texture.x_scale
                 bl_mat["skppy_y_scale"] = mat.texture.y_scale
+            cls._attach_pbr_textures(bl_mat, mat, bsdf)
+
+        cls._store_pbr_metadata(bl_mat, mat)
 
         if mat.alpha < 1.0 or has_texture_alpha:
             cls._set_transparency_method(bl_mat)
@@ -238,38 +251,12 @@ class BlenderSceneBuilder:
 
         Returns True when the loaded image alpha channel contains transparency.
         """
-        ext = os.path.splitext(texture.filename)[1] if texture.filename else ".png"
-        tmp_fd, tmp_path = tempfile.mkstemp(suffix=ext)
-        try:
-            with os.fdopen(tmp_fd, "wb") as tmp:
-                tmp.write(texture.data)
-            image = bpy.data.images.load(tmp_path, check_existing=False)
-            # Pack while the temp file is still on disk, then rename for clarity.
-            image.pack()
-            if texture.filename:
-                image.name = os.path.basename(texture.filename)
-            image.filepath_raw = ""  # drop the now-deleted temp path
-        finally:
-            try:
-                os.unlink(tmp_path)
-            except OSError:
-                pass
+        image = cls._load_texture_image(texture)
+        tex_node = cls._new_image_texture_node(bl_mat, image, location=(-280, 200))
 
         tree = bl_mat.node_tree
         nodes = tree.nodes
         links = tree.links
-
-        # Texture Coordinate node - use UV when per-face UV data is available,
-        # with Generated as a fallback.
-        tex_coord = nodes.new("ShaderNodeTexCoord")
-        tex_coord.location = (-500, 200)
-
-        tex_node = nodes.new("ShaderNodeTexImage")
-        tex_node.image = image
-        tex_node.location = (-280, 200)
-
-        links.new(tex_coord.outputs["UV"], tex_node.inputs["Vector"])
-
         bsdf = nodes.get("Principled BSDF")
         if bsdf:
             cls._link_principled_input(links, tex_node.outputs.get("Color"), bsdf, "Base Color")
@@ -284,6 +271,153 @@ class BlenderSceneBuilder:
         return cls._image_uses_alpha(image)
 
     @staticmethod
+    def _load_texture_image(texture, *, non_color: bool = False) -> "bpy.types.Image":
+        """Load and pack one in-memory texture image."""
+        ext = os.path.splitext(texture.filename)[1] if texture.filename else ".png"
+        tmp_fd, tmp_path = tempfile.mkstemp(suffix=ext)
+        try:
+            with os.fdopen(tmp_fd, "wb") as tmp:
+                tmp.write(texture.data)
+            image = bpy.data.images.load(tmp_path, check_existing=False)
+            # Pack while the temp file is still on disk, then rename for clarity.
+            image.pack()
+            if texture.filename:
+                image.name = os.path.basename(texture.filename)
+            image.filepath_raw = ""  # drop the now-deleted temp path
+            if non_color:
+                image.colorspace_settings.name = "Non-Color"
+        finally:
+            try:
+                os.unlink(tmp_path)
+            except OSError:
+                pass
+        return image
+
+    @staticmethod
+    def _new_image_texture_node(bl_mat, image, *, location: tuple[int, int]):
+        """Create a UV-driven image node for a packed image."""
+        tree = bl_mat.node_tree
+        nodes = tree.nodes
+        links = tree.links
+        tex_coord = nodes.new("ShaderNodeTexCoord")
+        tex_coord.location = (location[0] - 220, location[1])
+
+        tex_node = nodes.new("ShaderNodeTexImage")
+        tex_node.image = image
+        tex_node.location = location
+
+        links.new(tex_coord.outputs["UV"], tex_node.inputs["Vector"])
+        return tex_node
+
+    @classmethod
+    def _attach_pbr_textures(cls, bl_mat, mat, bsdf) -> None:
+        """Build Blender nodes for embedded scalar and relief maps."""
+        nodes = bl_mat.node_tree.nodes
+        links = bl_mat.node_tree.links
+        for index, (slot_name, socket_name) in enumerate(
+            (("metallic_texture", "Metallic"), ("roughness_texture", "Roughness"))
+        ):
+            texture = getattr(mat, slot_name)
+            if texture is None or texture.data is None:
+                continue
+            output = cls._attach_scalar_texture(bl_mat, texture, location=(-280, -40 - index * 240))
+            cls._link_principled_input(links, output, bsdf, socket_name)
+
+        normal_output = None
+        if mat.normal_texture is not None and mat.normal_texture.data is not None:
+            tex_node = cls._pbr_image_node(bl_mat, mat.normal_texture, location=(-280, -520))
+            normal_map = nodes.new("ShaderNodeNormalMap")
+            normal_map.label = "SKP Normal"
+            normal_map.location = (-40, -520)
+            normal_map.inputs["Strength"].default_value = mat.normal_scale
+            links.new(tex_node.outputs["Color"], normal_map.inputs["Color"])
+            normal_output = normal_map.outputs["Normal"]
+
+        if mat.bump_texture is not None and mat.bump_texture.data is not None:
+            height = cls._attach_scalar_texture(bl_mat, mat.bump_texture, location=(-280, -760))
+            bump = nodes.new("ShaderNodeBump")
+            bump.label = "SKP Bump"
+            bump.location = (-40, -680)
+            bump.inputs["Strength"].default_value = mat.bump_strength
+            links.new(height, bump.inputs["Height"])
+            if normal_output is not None:
+                links.new(normal_output, bump.inputs["Normal"])
+            normal_output = bump.outputs["Normal"]
+        if normal_output is not None:
+            cls._link_principled_input(links, normal_output, bsdf, "Normal")
+
+        if mat.displacement_texture is not None and mat.displacement_texture.data is not None:
+            height = cls._attach_scalar_texture(bl_mat, mat.displacement_texture, location=(-280, -1000))
+            displacement = nodes.new("ShaderNodeDisplacement")
+            displacement.label = "SKP Displacement"
+            displacement.location = (0, -920)
+            displacement.inputs["Scale"].default_value = mat.displacement_scale
+            links.new(height, displacement.inputs["Height"])
+            material_output = nodes.get("Material Output")
+            if material_output is not None:
+                links.new(displacement.outputs["Displacement"], material_output.inputs["Displacement"])
+
+    @classmethod
+    def _attach_scalar_texture(cls, bl_mat, texture, *, location: tuple[int, int]):
+        """Create a non-color texture chain with source inversion and brightness."""
+        tex_node = cls._pbr_image_node(bl_mat, texture, location=location)
+        output = tex_node.outputs["Color"]
+        nodes = bl_mat.node_tree.nodes
+        links = bl_mat.node_tree.links
+        if texture.inverted:
+            invert = nodes.new("ShaderNodeMath")
+            invert.operation = "SUBTRACT"
+            invert.label = "SKP Invert"
+            invert.inputs[0].default_value = 1.0
+            invert.location = (location[0] + 200, location[1])
+            links.new(output, invert.inputs[1])
+            output = invert.outputs["Value"]
+        if texture.brightness != 1.0:
+            multiply = nodes.new("ShaderNodeMath")
+            multiply.operation = "MULTIPLY"
+            multiply.label = "SKP Brightness"
+            multiply.inputs[1].default_value = texture.brightness
+            multiply.location = (location[0] + 400, location[1])
+            links.new(output, multiply.inputs[0])
+            output = multiply.outputs["Value"]
+        return output
+
+    @classmethod
+    def _pbr_image_node(cls, bl_mat, texture, *, location: tuple[int, int]):
+        image = cls._load_texture_image(texture, non_color=True)
+        tex_node = cls._new_image_texture_node(bl_mat, image, location=location)
+        tex_node.label = f"SKP {os.path.basename(texture.filename)}"
+        return tex_node
+
+    @staticmethod
+    def _store_pbr_metadata(bl_mat, mat) -> None:
+        """Keep source PBR parameters and missing map references inspectable."""
+        values = {
+            "skppy_specular": mat.specular,
+            "skppy_ior": mat.ior,
+            "skppy_emission_strength": mat.emission_strength,
+            "skppy_bump_map_type": mat.bump_map_type,
+            "skppy_bump_strength": mat.bump_strength,
+            "skppy_normal_scale": mat.normal_scale,
+            "skppy_displacement_scale": mat.displacement_scale,
+        }
+        for key, value in values.items():
+            bl_mat[key] = value
+        for slot_name in (
+            "metallic_texture",
+            "roughness_texture",
+            "bump_texture",
+            "normal_texture",
+            "displacement_texture",
+        ):
+            texture = getattr(mat, slot_name)
+            key = f"skppy_{slot_name}"
+            if texture is not None:
+                bl_mat[key] = texture.filename
+            elif key in bl_mat:
+                del bl_mat[key]
+
+    @staticmethod
     def _set_principled_input(
         bsdf: "bpy.types.Node",
         socket_name: str,
@@ -292,6 +426,14 @@ class BlenderSceneBuilder:
         socket = bsdf.inputs.get(socket_name)
         if socket is not None:
             socket.default_value = value
+
+    @staticmethod
+    def _set_first_principled_input(bsdf: "bpy.types.Node", socket_names: tuple[str, ...], value) -> None:
+        for socket_name in socket_names:
+            socket = bsdf.inputs.get(socket_name)
+            if socket is not None:
+                socket.default_value = value
+                return
 
     @staticmethod
     def _link_principled_input(
