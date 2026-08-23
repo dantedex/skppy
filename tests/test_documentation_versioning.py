@@ -36,6 +36,12 @@ def test_documentation_workflow_deploys_without_an_opt_in_variable() -> None:
     assert "ENABLE_GITHUB_PAGES" not in workflow
 
 
+def test_documentation_workflow_does_not_deploy_duplicate_tag_builds() -> None:
+    workflow = (ROOT / ".github" / "workflows" / "docs.yml").read_text(encoding="utf-8")
+
+    assert workflow.count("github.ref_type != 'tag'") == 2
+
+
 def test_documentation_uses_current_sphinx_without_multiversion_dependency() -> None:
     metadata = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
 

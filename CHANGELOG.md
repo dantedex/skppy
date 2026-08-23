@@ -5,6 +5,11 @@ the project uses semantic versioning while the public API remains pre-1.0.
 
 ## Unreleased
 
+### Fixed
+
+- Build versioned documentation for release tags without starting a duplicate
+  GitHub Pages deployment that violates the main-only environment policy.
+
 ## 0.10.0 - 2026-08-23
 
 ### Added
