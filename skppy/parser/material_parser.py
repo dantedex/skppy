@@ -320,6 +320,7 @@ def _parse_material_xml(
     *,
     material: Material | None = None,
     import_vray_materials: bool = False,
+    image_directory: str | None = None,
 ) -> Material:
     """
     Apply a material.xml document to a mutable material and return it.
@@ -348,6 +349,9 @@ def _parse_material_xml(
     if mat_el is None:
         return target if target is not None else candidate
 
+    if target is None:
+        candidate.name = mat_el.get("name", candidate.name)
+
     candidate.color = Color(
         r=_attr_int(mat_el, "colorRed", candidate.color.r),
         g=_attr_int(mat_el, "colorGreen", candidate.color.g),
@@ -362,7 +366,14 @@ def _parse_material_xml(
     candidate.has_texture = mat_el.get("hasTexture", "0") == "1"
     candidate.texture = None
     if candidate.has_texture:
-        candidate.texture = _parse_texture_xml(mat_el, ns, mat_name, zip_file, zip_name_map or {})
+        candidate.texture = _parse_texture_xml(
+            mat_el,
+            ns,
+            mat_name,
+            zip_file,
+            zip_name_map or {},
+            image_directory=image_directory,
+        )
     _apply_pbr_xml(candidate, mat_el, ns)
     if import_vray_materials:
         apply_vray_xml(candidate, mat_el)
@@ -390,6 +401,8 @@ def _parse_texture_xml(
     material_name: str,
     zip_file: zipfile.ZipFile,
     zip_name_map: Mapping[str, str],
+    *,
+    image_directory: str | None = None,
 ) -> Texture | None:
     """Decode texture metadata and its first available embedded image."""
     texture_element = _find_optional_element(material_element, "mat:texture", "texture", ns)
@@ -400,10 +413,19 @@ def _parse_texture_xml(
     texture.filename = texture_element.get("textureFilename", "")
     texture.x_scale = normalize_texture_scale(_attr_float(texture_element, "xScale", texture.x_scale))
     texture.y_scale = normalize_texture_scale(_attr_float(texture_element, "yScale", texture.y_scale))
-    _load_declared_texture_image(texture, texture_element, ns, material_name, zip_file, zip_name_map)
+    _load_declared_texture_image(
+        texture,
+        texture_element,
+        ns,
+        material_name,
+        zip_file,
+        zip_name_map,
+        image_directory=image_directory,
+    )
     if texture.data is None and texture.filename:
         basename = os.path.basename(texture.filename.replace("\\", "/"))
-        fallback_path = f"materials/{material_name}/{basename}"
+        fallback_directory = image_directory or f"materials/{material_name}"
+        fallback_path = f"{fallback_directory}/{basename}"
         try:
             texture.data = _zip_read(zip_file, fallback_path, zip_name_map)
         except KeyError:
@@ -420,6 +442,8 @@ def _load_declared_texture_image(
     material_name: str,
     zip_file: zipfile.ZipFile,
     zip_name_map: Mapping[str, str],
+    *,
+    image_directory: str | None = None,
 ) -> None:
     """Load the first valid ZIP-relative image declared by a texture element."""
     images_element = _find_optional_element(texture_element, "mat:images", "images", ns)
@@ -430,7 +454,7 @@ def _load_declared_texture_image(
         image_path = image_element.get("path", "")
         if not image_path:
             continue
-        zip_path = _material_image_zip_path(material_name, image_path)
+        zip_path = _material_image_zip_path(material_name, image_path, image_directory=image_directory)
         try:
             texture.data = _zip_read(zip_file, zip_path, zip_name_map)
         except KeyError:
@@ -441,13 +465,21 @@ def _load_declared_texture_image(
         return
 
 
-def _material_image_zip_path(material_name: str, image_path: str) -> str:
+def _material_image_zip_path(
+    material_name: str,
+    image_path: str,
+    *,
+    image_directory: str | None = None,
+) -> str:
     """Resolve a material image path according to SKP ZIP conventions."""
-    if image_path.startswith("./"):
-        return f"materials/{material_name}/{image_path[2:]}"
-    if image_path.startswith("materials/"):
-        return image_path
-    return f"materials/{material_name}/{image_path}"
+    base_directory = image_directory or f"materials/{material_name}"
+    relative_path = image_path[2:] if image_path.startswith("./") else image_path
+    parts = relative_path.split("/")
+    if image_directory is not None and (relative_path.startswith("/") or ".." in parts):
+        raise ValueError(f"Unsafe material image path: {image_path!r}")
+    if relative_path.startswith(("materials/", "ref/")):
+        return relative_path
+    return f"{base_directory}/{relative_path}"
 
 
 def _apply_pbr_xml(material: Material, material_element: ET.Element, ns: Dict[str, str]) -> None:

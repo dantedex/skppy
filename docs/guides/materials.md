@@ -24,6 +24,33 @@ for mat in model.materials:
 `mat.color.a` is the stored color-channel alpha, while `mat.alpha` is the
 normalized material opacity used by importers. Faces reference `mat.id`.
 
+## Loading standalone SKM materials
+
+Use `load_material()` for a material saved from SketchUp or downloaded from a
+material library:
+
+```python
+import skppy
+
+material = skppy.load_material("stone.skm")
+print(material.name, material.color)
+if material.texture and material.texture.data:
+    print(material.texture.filename, len(material.texture.data))
+```
+
+The loader detects the material package from its ZIP contents rather than its
+extension. This also handles downloads incorrectly named `.skp` when their
+contents are actually an SKM package with `document.xml` and `ref/` resources.
+Malformed packages raise `skppy.InvalidSkmError`.
+
+Standalone packages can contain V-Ray attribute dictionaries. SketchUp color
+and texture values remain authoritative by default; pass
+`import_vray_materials=True` to prefer supported V-Ray scalar PBR values:
+
+```python
+material = skppy.load_material("stone.skm", import_vray_materials=True)
+```
+
 ---
 
 ## Accessing texture data

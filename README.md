@@ -37,6 +37,7 @@ Documentation sources live in [`docs/`](docs/). Build the current sources with
 
 - **Read** ZIP/VFF `.skp` files emitted for SketchUp 2021 and later
 - **Read** pre-ZIP CArchive `.skp` files into the same public model classes
+- **Read** standalone `.skm` material packages, including embedded textures and opt-in V-Ray PBR values
 - **Parse** geometry (vertices, edges, faces, curves, arc curves, guide points/lines, section planes)
 - **Parse** component definitions and instances (including nested groups and images)
 - **Parse** materials with colors, textures, and PBR properties (metallic, roughness)
@@ -74,6 +75,10 @@ for face in model.entities.faces:
 # Inspect materials
 for mat in model.materials:
     print(f"{mat.name}: color={mat.color}, metallic={mat.metallic}")
+
+# Load a standalone SketchUp material package
+material = skppy.load_material("stone.skm")
+print(material.name, material.texture.filename if material.texture else None)
 
 # Look at component definitions
 for defn in model.definitions:

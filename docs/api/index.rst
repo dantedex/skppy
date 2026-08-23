@@ -6,6 +6,7 @@ API Reference
    :caption: Core modules
 
    skppy.loader
+   skppy.material_loader
    skppy.exceptions
    skppy.utils
    skppy.triangulation

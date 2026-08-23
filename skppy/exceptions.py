@@ -23,6 +23,10 @@ Example
 InvalidSkpError
     Raised by :func:`skppy.load` when an existing file cannot be decoded as a
     supported SketchUp model.
+
+InvalidSkmError
+    Raised by :func:`skppy.load_material` when an existing file cannot be
+    decoded as a supported SketchUp material package.
 """
 
 from __future__ import annotations
@@ -36,6 +40,10 @@ class InvalidSkpError(Exception):
     ``__cause__``. Filesystem errors such as :class:`FileNotFoundError` and
     :class:`PermissionError` deliberately remain standard Python errors.
     """
+
+
+class InvalidSkmError(Exception):
+    """An existing file cannot be decoded as a valid SketchUp material package."""
 
 
 class ComponentCycleError(ValueError):

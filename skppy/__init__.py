@@ -99,11 +99,13 @@ from .data_structure.scene import (
 )
 from .exceptions import (
     ComponentCycleError,
+    InvalidSkmError,
     InvalidSkpError,
     LoadCancelledError,
     OldFormatError,
 )
 from .loader import load
+from .material_loader import load_material
 
 try:
     # The generated module is bundled into the Blender add-on, where package
@@ -143,6 +145,7 @@ __all__ = [
     "GuidePoint",
     "Image",
     "IndexedPreparedMesh",
+    "InvalidSkmError",
     "InvalidSkpError",
     "Layer",
     "LayerFolder",
@@ -183,6 +186,7 @@ __all__ = [
     "WatermarkManager",
     "__version__",
     "load",
+    "load_material",
     "new_model",
     "save",
 ]
