@@ -30,7 +30,7 @@ from collections.abc import Callable
 from ._cancellation import cancellation_scope, check_cancelled
 from .data_structure import SkpDocument
 from .data_structure.model import Model
-from .exceptions import InvalidSkpError
+from .exceptions import InvalidSkpError, OldFormatError
 from .parser.header_parser import parse_header
 from .parser.model_parser import parse_model
 from .parser.zip_entries import read_zip_entries
@@ -154,7 +154,17 @@ def _load(path: str, *, import_vray_materials: bool) -> Model:
 
             fh.seek(0)
             logger.info("Starting to parse file: %s", path)
-            header = parse_header(fh, locate_zip=True)
+            try:
+                header = parse_header(fh, locate_zip=True)
+            except OldFormatError:
+                # Some legacy SKP files carry an unrelated ZIP payload after
+                # the CArchive.  ``is_zipfile`` detects that trailing archive,
+                # so the authoritative SketchUp header must win dispatch.
+                fh.seek(0)
+                logger.info("Starting to parse legacy CArchive with appended ZIP: %s", path)
+                data = fh.read()
+                check_cancelled()
+                return parse_legacy_bytes(data, import_vray_materials=import_vray_materials)
             logger.info(
                 "Header parsed: product=%r, version=%r, zip_offset=%s",
                 header.product_name,

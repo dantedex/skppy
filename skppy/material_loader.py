@@ -51,6 +51,7 @@ def load_material(
                 build_zip_name_map(archive),
                 import_vray_materials=import_vray_materials,
                 image_directory="ref",
+                require_material=True,
             )
             return material
     except (ET.ParseError, KeyError, TypeError, UnicodeError, ValueError, zipfile.BadZipFile) as exc:

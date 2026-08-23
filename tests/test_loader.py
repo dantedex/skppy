@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import io
 import struct
 import zipfile
 
@@ -79,6 +80,27 @@ def test_load_dispatches_pathlike_non_zip_to_legacy_parser(tmp_path, monkeypatch
     monkeypatch.setattr(loader, "parse_legacy_bytes", parse_legacy)
 
     assert loader.load(filepath, import_vray_materials=True) is expected
+
+
+def test_load_dispatches_legacy_header_with_appended_zip_to_legacy_parser(tmp_path, monkeypatch):
+    """Trust the legacy SketchUp header when unrelated ZIP data is appended."""
+    filepath = tmp_path / "legacy-with-metadata.skp"
+    legacy_prefix = _legacy_string("SketchUp Model") + _legacy_string("{16.0.1}") + b"legacy archive"
+    zip_buffer = io.BytesIO()
+    with zipfile.ZipFile(zip_buffer, "w") as archive:
+        archive.writestr("document.xml", "<classificationDocument/>")
+    payload = legacy_prefix + zip_buffer.getvalue()
+    filepath.write_bytes(payload)
+    expected = Model()
+
+    def parse_legacy(data, *, import_vray_materials):
+        assert data == payload
+        assert import_vray_materials is False
+        return expected
+
+    monkeypatch.setattr(loader, "parse_legacy_bytes", parse_legacy)
+
+    assert loader.load(filepath) is expected
 
 
 def test_load_missing_pathlike_raises_file_not_found(tmp_path):

@@ -97,6 +97,18 @@ def test_rejects_material_texture_parent_traversal(tmp_path: Path) -> None:
     assert isinstance(caught.value.__cause__, ValueError)
 
 
+def test_rejects_unrelated_zip_document(tmp_path: Path) -> None:
+    """Do not mistake an SKP classification ZIP for a standalone material."""
+    path = tmp_path / "model-metadata.skp"
+    with zipfile.ZipFile(path, "w") as archive:
+        archive.writestr("document.xml", "<classificationDocument/>")
+
+    with pytest.raises(skppy.InvalidSkmError) as caught:
+        skppy.load_material(path)
+
+    assert isinstance(caught.value.__cause__, ValueError)
+
+
 def test_missing_material_path_preserves_file_not_found(tmp_path: Path) -> None:
     with pytest.raises(FileNotFoundError):
         skppy.load_material(tmp_path / "missing.skm")

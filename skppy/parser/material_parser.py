@@ -321,13 +321,15 @@ def _parse_material_xml(
     material: Material | None = None,
     import_vray_materials: bool = False,
     image_directory: str | None = None,
+    require_material: bool = False,
 ) -> Material:
     """
     Apply a material.xml document to a mutable material and return it.
 
     When called independently, a neutral material is created first. The model
     parser passes its TLV-initialized object so malformed or absent optional XML
-    never discards the material identity and binary fallbacks.
+    never discards the material identity and binary fallbacks. Standalone SKM
+    loading sets ``require_material`` to reject unrelated ZIP documents.
     """
     target = material
     if target is None:
@@ -347,6 +349,8 @@ def _parse_material_xml(
         # Some files have the element without namespace prefix
         mat_el = root.find("material")
     if mat_el is None:
+        if require_material:
+            raise ValueError("material document does not contain a material element")
         return target if target is not None else candidate
 
     if target is None:
