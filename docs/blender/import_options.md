@@ -63,6 +63,11 @@ you need exact per-face normals with no interpolation.
 Apply SketchUp smooth/soft edge shading where the source edge flags and adjacent
 face normals indicate a real smoothed transition.
 
+When any edge qualifies, all generated polygons use smooth shading, with every
+non-smooth source boundary marked sharp. Triangulation diagonals stay unmarked
+so triangles from the same source face share a continuous normal fan. Quads
+conversion preserves these sharp boundaries.
+
 **Enable** (recommended): Cylinders, arcs, and softened curved surfaces shade
 smooth while hard boundaries such as caps stay sharp.
 **Disable:** Keep imported faces flat shaded and do not mark additional sharp

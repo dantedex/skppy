@@ -58,7 +58,9 @@ The Blender importer uses those arrays to:
 2. Check whether the source edge has the smooth bit.
 3. Compare adjacent face normals.
 4. If at least one edge actually needs smoothing, set Blender polygon smoothing
-   for the participating faces and mark only the necessary boundaries as sharp.
+   for all generated polygons and mark every non-smooth source boundary sharp.
+   Generated diagonals remain non-sharp, preserving the normal fan across
+   triangles of the same source face. Quads conversion retains sharp edges.
 
 This keeps cylindrical sides smooth without rounding cap edges.
 If no source edge requires smoothing, the Blender importer leaves the mesh in

@@ -12,6 +12,8 @@ blender_skp_io/blender_skp_io/
 +- annotation_builder.py# Text and dimension conversion
 +- blender_manifest.toml# Extension manifest (version, Blender minimum)
 +- export_builder.py    # BlenderModelBuilder - Blender to public Model
++- material_builder.py  # Isolated material nodes and packed image resources
++- import_transaction.py# Failure cleanup for newly created data-blocks
 +- scene_builder.py     # BlenderSceneBuilder - main conversion logic
 \- operators/
     +- export_skp.py    # EXPORT_OT_skp operator + export properties
@@ -170,23 +172,25 @@ font family names are not resolved to operating-system font files automatically.
 
 ## Material creation
 
-`BlenderSceneBuilder.build_material()` converts one skppy material and is used
-both by standalone SKM imports and by `_build_materials()`, which iterates
-`model.materials`:
+`BlenderMaterialBuilder` converts materials inside the scene-build transaction.
+`BlenderSceneBuilder.build_material()` provides a transactional entry point for
+standalone SKM imports:
 
-- Reuses and updates materials already present in `bpy.data.materials` by name.
-- Creates a new `bpy.data.materials.new(name)` when needed.
+- Always creates a new `bpy.data.materials.new(name)`; names do not grant
+  ownership of existing materials.
 - Enables `use_nodes = True` and sets up a **Principled BSDF** node tree.
 - Maps base colour, alpha, metallic, roughness, specular/IOR, and emission to
   compatible Principled BSDF inputs in Blender 4.5 and 5.2.
 - For textured materials:
   1. Writes texture bytes to a temporary file.
   2. Loads the image with `bpy.data.images.load(temp_path)`.
-  3. Packs the image into the `.blend` with `image.pack()`.
+  3. Stores validated bytes in the persistent user-data texture cache and packs
+     the image into the `.blend` with `image.pack()`.
   4. Deletes the temp file.
   5. Connects an `Image Texture` node to the BSDF Base Color and Alpha.
   6. Preserves the physical texture dimensions in the `skppy_x_scale` and
      `skppy_y_scale` custom properties.
+
 - Loads embedded metallic, roughness, normal, bump, and displacement maps as
   Non-Color images and connects the corresponding adjustment and shader nodes.
 - Retains renderer scalars and every auxiliary map basename as `skppy_*`
@@ -199,6 +203,11 @@ material loading only when the input is not a valid SKP model. This also
 supports SKM downloads carrying a `.skp` filename. Standalone materials enable
 Blender's Fake User flag because they are intentionally created without an
 object assignment.
+
+The main-thread import transaction records pre-existing data-blocks. A build
+failure removes only newly created objects, collections, meshes, curves,
+cameras, materials, and images. Finalization touches only meshes from the
+current import. Valid content-addressed cache files persist independently.
 
 ---
 

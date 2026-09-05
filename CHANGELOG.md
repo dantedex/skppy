@@ -22,6 +22,21 @@ the project uses semantic versioning while the public API remains pre-1.0.
 
 ### Fixed
 
+- Keep Blender imports isolated from existing materials and meshes; clean up
+  newly created data-blocks after failed builds.
+- Preserve hard source edges and smooth generated triangulation diagonals
+  consistently across face modes (GitHub #1).
+- Keep packed textures backed by persistent content-addressed files so standard
+  FBX and glTF exporters retain their image resources (GitHub #2).
+- Resolve renderer maps by path and material scope, reject ambiguous fallback
+  names, and generate UVs for materials without a base-color texture.
+- Preserve roughness when optional V-Ray values are absent, and reject invalid
+  inner loops instead of silently filling openings.
+- Reject duplicate material names and unsupported renderer export properties;
+  write completed models through atomic destination replacement.
+- Enforce configurable resource byte budgets before ZIP extraction and check
+  cancellation between read chunks, including standalone material imports.
+
 - Build versioned documentation for release tags without starting a duplicate
   GitHub Pages deployment that violates the main-only environment policy.
 
