@@ -55,6 +55,18 @@ def test_legacy_load_obeys_entry_limit(tmp_path) -> None:
     assert isinstance(error.value.__cause__, InputLimitError)
 
 
+def test_corrupt_zip_reads_still_consume_budget(tmp_path) -> None:
+    path = tmp_path / "corrupt.zip"
+    with zipfile.ZipFile(path, "w") as archive:
+        archive.writestr("a.bin", b"123")
+    with BoundedZipFile(path, limits=skppy.LoadLimits(max_total_bytes=3)) as archive:
+        archive.getinfo("a.bin").CRC ^= 1
+        with pytest.raises(zipfile.BadZipFile, match="CRC"):
+            archive.read("a.bin")
+        with pytest.raises(InputLimitError):
+            archive.read("a.bin")
+
+
 def test_material_load_can_be_cancelled_before_reading(tmp_path) -> None:
     with pytest.raises(skppy.LoadCancelledError):
         skppy.load_material(tmp_path / "unused.skm", cancellation_check=lambda: True)

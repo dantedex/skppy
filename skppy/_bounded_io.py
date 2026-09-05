@@ -43,7 +43,9 @@ class BoundedZipFile(zipfile.ZipFile):
             limit = min(limit, self.limits.max_xml_bytes)
         if info.file_size > limit:
             raise InputLimitError(f"{info.filename!r} exceeds its input byte limit ({limit})")
+        # Reserve before extraction: optional corrupt-resource recovery must
+        # not allow repeated failed reads to bypass the cumulative budget.
+        self._bytes_read += info.file_size
         with self.open(info, pwd=pwd) as stream:
             data = read_bounded(stream, limit, info.filename)
-        self._bytes_read += len(data)
         return data
