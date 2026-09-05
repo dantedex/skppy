@@ -314,11 +314,11 @@ class BlenderSceneBuilder:
         self._assign_face_materials(mesh, indexed, mat_slot_map)
         self._assign_uv_layer(mesh, indexed)
 
-        if self.triangulation_mode == "QUADS":
-            self._convert_mesh_to_quads(mesh)
-
         if self.smooth_edges:
             self._apply_edge_shading(mesh, indexed)
+
+        if self.triangulation_mode == "QUADS":
+            self._convert_mesh_to_quads(mesh)
 
         self._compact_material_slots(mesh)
         return mesh
@@ -473,10 +473,10 @@ class BlenderSceneBuilder:
             return
 
         for poly in mesh.polygons:
-            vertices = list(poly.vertices)
-            poly.use_smooth = any(
-                self._edge_key(v1, v2) in smooth_keys for v1, v2 in zip(vertices, vertices[1:] + vertices[:1])
-            )
+            # Generated triangles belong to the same smoothing fan as their
+            # source face. Sharp source boundaries, not triangle membership,
+            # isolate flat surfaces from adjacent curved ones.
+            poly.use_smooth = True
 
         smooth_keys.difference_update(boundary_sharp_keys)
         for edge in mesh.edges:
@@ -541,20 +541,14 @@ class BlenderSceneBuilder:
         smooth_keys: set[Tuple[int, int]] = set()
         boundary_sharp_keys: set[Tuple[int, int]] = set()
         for face, edge_ids in zip(indexed.faces, indexed.face_edge_ids, strict=True):
-            face_smooth_keys: set[Tuple[int, int]] = set()
-            face_non_smooth_source_keys: set[Tuple[int, int]] = set()
             for i, edge_id in enumerate(edge_ids):
                 if edge_id is None:
                     continue
                 edge_key = self._edge_key(face[i], face[(i + 1) % len(face)])
                 if source_edge_smooth.get(edge_id, False):
-                    face_smooth_keys.add(edge_key)
+                    smooth_keys.add(edge_key)
                 else:
-                    face_non_smooth_source_keys.add(edge_key)
-
-            if face_smooth_keys:
-                smooth_keys.update(face_smooth_keys)
-                boundary_sharp_keys.update(face_non_smooth_source_keys)
+                    boundary_sharp_keys.add(edge_key)
 
         smooth_keys.difference_update(boundary_sharp_keys)
         return smooth_keys, boundary_sharp_keys
@@ -579,7 +573,7 @@ class BlenderSceneBuilder:
                 bm,
                 faces=bm.faces[:],
                 cmp_seam=False,
-                cmp_sharp=False,
+                cmp_sharp=True,
                 cmp_uvs=True,
                 cmp_vcols=False,
                 cmp_materials=True,

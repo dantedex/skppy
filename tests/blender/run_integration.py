@@ -19,6 +19,7 @@ import bpy
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from fixture_data import legacy_v8_bytes, modern_zip_bytes
 from material_isolation import run as run_material_isolation
+from edge_shading import run as run_edge_shading
 
 
 def _arguments() -> argparse.Namespace:
@@ -916,6 +917,7 @@ def main() -> None:
     args = _arguments()
     module_name = _install_extension(args.addon)
     run_material_isolation(module_name)
+    run_edge_shading(module_name)
     _clear_scene()
     _run_synthetic(module_name)
     _clear_scene()
