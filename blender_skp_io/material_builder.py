@@ -5,9 +5,13 @@ from __future__ import annotations
 
 import os
 import tempfile
+from hashlib import sha256
+from pathlib import Path
 
 import bpy
 import numpy as np
+
+from .skppy._atomic_io import atomic_write
 
 
 class BlenderMaterialBuilder:
@@ -93,11 +97,27 @@ class BlenderMaterialBuilder:
             image = bpy.data.images.load(tmp_path, check_existing=False)
             if not all(image.size):
                 raise ValueError(f"Could not decode texture {texture.filename!r}")
-            # Pack while the temp file is still on disk, then rename for clarity.
+            # Packed data keeps .blend files self-contained. A real persistent
+            # path also lets file-based exporters copy/reference the image.
+            directory = Path(bpy.utils.user_resource("DATAFILES", path="skppy/textures", create=True))
+            suffix = {
+                "PNG": ".png",
+                "JPEG": ".jpg",
+                "TIFF": ".tif",
+                "BMP": ".bmp",
+                "TARGA": ".tga",
+                "TARGA_RAW": ".tga",
+                "OPEN_EXR": ".exr",
+                "HDR": ".hdr",
+                "JPEG2000": ".jp2",
+            }.get(image.file_format, ".png")
+            cached = directory / f"{sha256(texture.data).hexdigest()}{suffix}"
+            if not cached.is_file() or cached.read_bytes() != texture.data:
+                atomic_write(cached, texture.data)
+            image.filepath_raw = str(cached)
             image.pack()
             if texture.filename:
                 image.name = os.path.basename(texture.filename)
-            image.filepath_raw = ""  # drop the now-deleted temp path
             if non_color:
                 image.colorspace_settings.name = "Non-Color"
         finally:

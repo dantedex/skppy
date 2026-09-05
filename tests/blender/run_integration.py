@@ -20,6 +20,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from fixture_data import legacy_v8_bytes, modern_zip_bytes
 from material_isolation import run as run_material_isolation
 from edge_shading import run as run_edge_shading
+from texture_interchange import run as run_texture_interchange
 
 
 def _arguments() -> argparse.Namespace:
@@ -918,6 +919,7 @@ def main() -> None:
     module_name = _install_extension(args.addon)
     run_material_isolation(module_name)
     run_edge_shading(module_name)
+    run_texture_interchange(module_name, _png_rgba(255))
     _clear_scene()
     _run_synthetic(module_name)
     _clear_scene()

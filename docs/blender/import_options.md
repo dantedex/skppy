@@ -110,6 +110,23 @@ Transparent materials (`alpha < 1.0`) use:
 **Disable**: All objects receive Blender's default material (grey). Useful for
 quick mesh inspection without shader overhead.
 
+Each import creates independent materials, even when their names match existing
+materials. Existing objects and shaders are not updated by reimporting a file.
+
+Images remain packed in the `.blend`. Valid image bytes are also stored in
+Blender's user-data `skppy/textures` directory under content-derived names.
+This persistent copy gives FBX and other file-based exporters a usable path;
+the importer never follows external paths declared by a source material.
+For portable FBX delivery, use **Path Mode: Copy** with **Embed Textures**.
+Alternatively, use **File → External Data → Unpack Resources** before export.
+The cache is not automatically removed because exported files may reference it.
+Only remove it once those references are no longer needed; packed `.blend`
+images remain available independently of the cache.
+
+Renderer-only materials receive UVs too. The base texture defines their shared
+scale when present; otherwise the first available metallic, roughness, normal,
+bump, or displacement map supplies the scale, in that order.
+
 ---
 
 ## Use Render Materials
