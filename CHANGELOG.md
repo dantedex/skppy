@@ -5,18 +5,6 @@ the project uses semantic versioning while the public API remains pre-1.0.
 
 ## Unreleased
 
-### Changed
-
-- Prefer valid Enscape metadata over V-Ray when both describe the same material;
-  malformed Enscape metadata still permits the V-Ray fallback.
-- Import Enscape diffuse color, opacity, and embedded diffuse textures. Keep
-  the SketchUp texture when the renderer's replacement image is unavailable.
-- Decode Enscape material attributes in legacy SKP files as well as modern
-  SKP and SKM packages, respecting the configured XML size budget and reusing
-  only each material's own embedded image for matching map references.
-- Apply Enscape diffuse texture brightness and inversion in Blender while
-  keeping image alpha separate and multiplying it by material opacity.
-
 ### Added
 
 - Import opt-in Enscape PBR metadata from standalone SKM packages and modern
@@ -28,6 +16,15 @@ the project uses semantic versioning while the public API remains pre-1.0.
 
 ### Changed
 
+- Prefer valid Enscape metadata over V-Ray when both describe the same material;
+  malformed Enscape metadata still permits the V-Ray fallback.
+- Import Enscape diffuse color, opacity, and embedded diffuse textures. Keep
+  the SketchUp texture when the renderer's replacement image is unavailable.
+- Decode Enscape material attributes in legacy SKP files as well as modern
+  SKP and SKM packages, respecting the configured XML size budget and reusing
+  only each material's own embedded image for matching map references.
+- Apply Enscape diffuse texture brightness and inversion in Blender while
+  keeping image alpha separate and multiplying it by material opacity.
 - Broaden the Blender `Use V-Ray Materials` option to `Use Render Materials`;
   the compatible `import_vray_materials` property now enables both V-Ray and
   Enscape metadata.

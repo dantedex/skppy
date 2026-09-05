@@ -54,10 +54,42 @@ material = skppy.load_material("stone.skm", import_vray_materials=True)
 ```
 
 The compatibility keyword retains its original name, but enables both V-Ray
-and Enscape metadata. Supported properties include metallic, roughness,
-specular, IOR, emission, bump, normal, and displacement values. Auxiliary maps
-use the `metallic_texture`, `roughness_texture`, `bump_texture`,
-`normal_texture`, and `displacement_texture` slots.
+and Enscape metadata. Valid Enscape metadata takes precedence when both are
+present; malformed or absent Enscape metadata permits the V-Ray fallback.
+This same option is accepted by `skppy.load()` for modern and legacy SKP files.
+
+(enscape-import-coverage)=
+### Enscape import coverage
+
+The decoder handles the `Enscape.Material` dictionary's `MaterialData` XML,
+including the `SketchupMaterial Version="4"` layout observed in compatibility
+samples. No external renderer or plugin is needed.
+
+| Enscape control | Imported value / Blender behavior |
+| --- | --- |
+| `DiffuseColor`, `Opacity` | Base color and opacity; opacity multiplies diffuse image alpha |
+| `Metallic`, `Roughness`, `Specular` | Metallic, roughness, and specular scalar values |
+| `IndexOfRefraction` | Principled IOR |
+| `EmissiveColor`, `EmissiveStrength` | Emission color and strength |
+| `DiffuseTexture` | Embedded diffuse image; retain the SketchUp image when the replacement is missing |
+| `RoughnessTexture` | Non-Color roughness map |
+| `BumpMapType=BUMP`, `BumpAmount` | Height map through a Bump node |
+| `BumpMapType=NORMAL`, `NormalMapIntensity` | Tangent-space Normal Map node |
+| `BumpMapType=DISPLACEMENT`, `BumpAmount` | Displacement node; actual geometry displacement depends on Blender render settings |
+| `Brightness`, `IsInverted` | Preserved per map; applied to diffuse and scalar-map node chains |
+
+Enscape metallic **maps** are not decoded, despite the shared `Material` model
+having a `metallic_texture` slot. Glass/transmission, water, grass, foliage,
+clearcoat, tint/image-fade controls, and explicit per-map size/rotation are not
+translated. Map UVs use the existing SketchUp texture scale. Normal-map color
+brightness/inversion is retained as metadata but is not applied to normal
+vectors; normal intensity is supported. Enscape export is not implemented.
+
+Legacy SKP decoding reuses a material's own embedded texture only when the map
+filename matches (case-insensitively). Other maps remain missing references;
+images from unrelated materials are not substituted. Invalid or oversized
+optional Enscape XML is ignored, leaving the SketchUp/V-Ray fallback intact.
+The XML budget is configurable through `skppy.LoadLimits(max_xml_bytes=...)`.
 
 Some SKM libraries reference auxiliary images through creator-machine paths
 without embedding those images. skppy retains the safe basename and renderer
@@ -71,8 +103,10 @@ if roughness:
         print("The SKM references this map but does not contain its pixels")
 ```
 
-Only archive entries are eligible for automatic loading. skppy never opens an
-absolute path serialized by another machine.
+Only embedded images are eligible for automatic loading. skppy never opens an
+absolute path serialized by another machine. In SKM/modern SKP packages, a
+declared safe ZIP path takes precedence over the current material's folder and
+an unambiguous basename match. Ambiguous images are not guessed.
 
 ---
 
