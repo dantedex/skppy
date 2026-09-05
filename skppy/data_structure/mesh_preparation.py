@@ -94,7 +94,12 @@ class _MeshPreparer:
         if outer is None:
             return None
 
-        holes = [resolved for loop in face.inner_loops if (resolved := self._resolve_loop(loop)) is not None]
+        holes = []
+        for index, loop in enumerate(face.inner_loops):
+            resolved = self._resolve_loop(loop)
+            if resolved is None:
+                raise ValueError(f"Face {face.id}: invalid inner loop {index}; refusing to fill an unresolved opening")
+            holes.append(resolved)
         holes.extend(
             _LoopGeometry(positions, [None] * len(positions))
             for positions in self.opening_positions_by_face_id.get(face.id, [])

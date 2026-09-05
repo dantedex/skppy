@@ -102,6 +102,14 @@ def test_renderer_only_material_has_scaled_uvs(slot: str) -> None:
     assert indexed.face_uvs == [[(0.0, 0.0), (1.0, 0.0), (1.0, 0.5), (0.0, 0.5)]]
 
 
+def test_unresolved_hole_is_not_silently_filled() -> None:
+    entities, face, _, _ = _textured_quad()
+    face.inner_loops = [Loop([EdgeUse(901, False), EdgeUse(902, False), EdgeUse(903, False)])]
+
+    with pytest.raises(ValueError, match="Face 100: invalid inner loop 0"):
+        entities.prepare_mesh("broken opening", {})
+
+
 def test_prepare_mesh_uses_other_side_projection_for_same_material():
     entities, face, material, projection = _textured_quad(
         front_material_id=7,
