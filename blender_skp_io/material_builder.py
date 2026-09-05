@@ -78,7 +78,7 @@ class BlenderMaterialBuilder:
         links = tree.links
         bsdf = nodes.get("Principled BSDF")
         if bsdf:
-            color = cls._adjust_diffuse_texture(bl_mat, tex_node.outputs["Color"], texture)
+            color = cls._adjust_texture_color(bl_mat, tex_node.outputs["Color"], texture)
             color = cls._tint_and_fade(bl_mat, color, material)
             cls._link_principled_input(links, color, bsdf, "Base Color")
             cls._link_texture_alpha(
@@ -92,7 +92,7 @@ class BlenderMaterialBuilder:
         return cls._image_uses_alpha(image)
 
     @staticmethod
-    def _adjust_diffuse_texture(
+    def _adjust_texture_color(
         bl_mat: bpy.types.Material, output: bpy.types.NodeSocket, texture: Texture
     ) -> bpy.types.NodeSocket:
         """Apply renderer color adjustments without modifying the texture alpha."""
@@ -100,7 +100,7 @@ class BlenderMaterialBuilder:
         links = bl_mat.node_tree.links
         if texture.inverted:
             invert = nodes.new("ShaderNodeInvert")
-            invert.label = "SKP Diffuse Invert"
+            invert.label = "SKP Color Invert"
             invert.location = (-40, 300)
             invert.inputs["Fac"].default_value = 1.0
             links.new(output, invert.inputs["Color"])
@@ -108,7 +108,7 @@ class BlenderMaterialBuilder:
         if texture.brightness != 1.0:
             multiply = nodes.new("ShaderNodeMixRGB")
             multiply.blend_type = "MULTIPLY"
-            multiply.label = "SKP Diffuse Brightness"
+            multiply.label = "SKP Color Brightness"
             multiply.location = (160, 300)
             multiply.inputs[0].default_value = 1.0
             multiply.inputs[2].default_value = (texture.brightness,) * 3 + (1.0,)
@@ -229,7 +229,8 @@ class BlenderMaterialBuilder:
             normal_map.label = "SKP Normal"
             normal_map.location = (-40, -520)
             normal_map.inputs["Strength"].default_value = mat.normal_scale
-            links.new(tex_node.outputs["Color"], normal_map.inputs["Color"])
+            color = cls._adjust_texture_color(bl_mat, tex_node.outputs["Color"], mat.normal_texture)
+            links.new(color, normal_map.inputs["Color"])
             normal_output = normal_map.outputs["Normal"]
 
         if mat.bump_texture is not None and mat.bump_texture.data is not None:
@@ -237,7 +238,8 @@ class BlenderMaterialBuilder:
             bump = nodes.new("ShaderNodeBump")
             bump.label = "SKP Bump"
             bump.location = (-40, -680)
-            bump.inputs["Strength"].default_value = mat.bump_strength
+            bump.inputs["Strength"].default_value = abs(mat.bump_strength)
+            bump.invert = mat.bump_strength < 0.0
             links.new(height, bump.inputs["Height"])
             if normal_output is not None:
                 links.new(normal_output, bump.inputs["Normal"])

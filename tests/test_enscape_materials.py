@@ -60,7 +60,7 @@ def test_safely_defaults_invalid_enscape_fields(emission_color: str, relief_type
         (0.2, 0.3, 1.0, 1.5)
     )
     assert material.emission_color == skppy.Color(1, 2, 3)
-    assert (material.emission_strength, material.bump_strength, material.normal_scale) == pytest.approx((0, 0, 0))
+    assert (material.emission_strength, material.bump_strength, material.normal_scale) == pytest.approx((0, -2, 0))
     assert material.bump_map_type == ("BUMP" if relief_type == "BUMP" else "NONE")
     assert material.bump_texture is None
     assert material.roughness_texture is None

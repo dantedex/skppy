@@ -79,7 +79,7 @@ samples. No external renderer or plugin is needed.
 | `BumpMapType=BUMP`, `BumpAmount` | Height map through a Bump node |
 | `BumpMapType=NORMAL`, `NormalMapIntensity` | Tangent-space Normal Map node |
 | `BumpMapType=DISPLACEMENT`, `BumpAmount` | Displacement node; actual geometry displacement depends on Blender render settings |
-| `Brightness`, `IsInverted` | Preserved per map; applied to diffuse and scalar-map node chains |
+| `Brightness`, `IsInverted` | Applied to diffuse, scalar, and normal image colors before shader interpretation |
 | `UseExplicitTransformation`, `Width`, `Height` | Independent map sizes in meters, applied through per-image UV multipliers |
 
 Enscape metallic **maps** are not decoded, despite the shared `Material` model
@@ -88,9 +88,10 @@ clearcoat and nonzero per-map rotation are not
 translated. Nonzero texture rotation emits a warning. Mesh UVs retain the
 existing SketchUp texture scale; image nodes apply explicit width/height
 without modifying other maps. Invalid dimensions retain the SketchUp mapping
-and emit a warning. Normal-map color
-brightness/inversion is retained as metadata but is not applied to normal
-vectors; normal intensity is supported. Enscape export is not implemented.
+and emit a warning. Normal-image brightness/inversion is applied before normal
+decoding, not to the resulting vector. Negative bump amounts use Blender's
+Bump inversion; negative displacement amounts retain their signed scale.
+Enscape export is not implemented.
 
 Glass uses a Principled transmission approximation, with imported roughness
 and IOR. It does not reproduce Enscape's thin/solid-glass distinction or

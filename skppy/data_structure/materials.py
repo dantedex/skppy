@@ -94,7 +94,7 @@ class Material:
         Relief interpretation: ``NONE``, ``BUMP``, ``NORMAL``, or
         ``DISPLACEMENT``.
     bump_strength : float, optional
-        Height/bump strength. Default 0.0.
+        Signed height/bump strength. Negative values reverse the relief. Default 0.0.
     normal_scale : float, optional
         Tangent-space normal map strength. Default 1.0.
     displacement_scale : float, optional

@@ -77,7 +77,7 @@ def _apply_metadata(
         material.ior = ior
     material.emission_color = _hex_color(_text(root, "EmissiveColor")) or material.emission_color
     material.emission_strength = max(0.0, _float(root, "EmissiveStrength", material.emission_strength))
-    material.bump_strength = max(0.0, _float(root, "BumpAmount", material.bump_strength))
+    material.bump_strength = _float(root, "BumpAmount", material.bump_strength)
     material.normal_scale = max(0.0, _float(root, "NormalMapIntensity", material.normal_scale))
     if (_text(root, "TypeV5") or _text(root, "Type")) == "GLASS":
         material.transmission = 1.0 - material.alpha

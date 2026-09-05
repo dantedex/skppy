@@ -20,14 +20,14 @@ def run(module_name: str, pixels: bytes) -> None:
               <TintColor>#8080FF</TintColor><ImageFade>0.25</ImageFade>
               <Metallic>0.7</Metallic><Roughness>0.2</Roughness><IndexOfRefraction>1.8</IndexOfRefraction>
               <EmissiveColor>#204060</EmissiveColor><EmissiveStrength>2</EmissiveStrength>
-              <BumpMapType>{relief}</BumpMapType><BumpAmount>0.3</BumpAmount><NormalMapIntensity>0.6</NormalMapIntensity>
+              <BumpMapType>{relief}</BumpMapType><BumpAmount>-0.3</BumpAmount><NormalMapIntensity>0.6</NormalMapIntensity>
               <DiffuseTexture><Filepath>diffuse.png</Filepath><Brightness>0.7</Brightness><IsInverted>true</IsInverted>
                 <UseExplicitTransformation>true</UseExplicitTransformation><Width>0.0127</Width><Height>0.0254</Height>
               </DiffuseTexture>
               <RoughnessTexture><Filepath>roughness.png</Filepath><Brightness>0.8</Brightness><IsInverted>true</IsInverted>
                 <UseExplicitTransformation>true</UseExplicitTransformation><Width>0.0254</Width><Height>0.00635</Height>
               </RoughnessTexture>
-              <BumpTexture><Filepath>relief.png</Filepath></BumpTexture>
+              <BumpTexture><Filepath>relief.png</Filepath><Brightness>0.8</Brightness><IsInverted>true</IsInverted></BumpTexture>
             </SketchupMaterial>
           ]]></Attribute></AttributeDictionary>
         </material></materialDocument>"""
@@ -85,11 +85,18 @@ def run(module_name: str, pixels: bytes) -> None:
         if relief == "DISPLACEMENT":
             node = nodes["Material Output"].inputs["Displacement"].links[0].from_node
             assert node.bl_idname == "ShaderNodeDisplacement"
-            assert abs(node.inputs["Scale"].default_value - 0.3) < 1e-6
+            assert abs(node.inputs["Scale"].default_value + 0.3) < 1e-6
         else:
             node = bsdf.inputs["Normal"].links[0].from_node
             assert node.bl_idname == ("ShaderNodeBump" if relief == "BUMP" else "ShaderNodeNormalMap")
             assert abs(node.inputs["Strength"].default_value - (0.3 if relief == "BUMP" else 0.6)) < 1e-6
+            if relief == "BUMP":
+                assert node.invert
+            else:
+                color = node.inputs["Color"].links[0].from_node
+                assert color.blend_type == "MULTIPLY"
+                assert abs(color.inputs[2].default_value[0] - 0.8) < 1e-6
+                assert color.inputs[1].links[0].from_node.bl_idname == "ShaderNodeInvert"
         exporter = importlib.import_module(f"{module_name}.export_builder").BlenderModelBuilder(bpy.context)
         exporter._material_for(material)
         assert any("base-color node graph" in warning for warning in exporter.warnings)

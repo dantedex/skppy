@@ -50,7 +50,7 @@ def _material_package(
         archive.writestr("ref/texture_1.jpg", b"jpeg texture")
 
 
-def _enscape_material_package(path: Path, *, relief_type: str = "NORMAL") -> None:
+def _enscape_material_package(path: Path, *, relief_type: str = "NORMAL", bump_amount: float = 0.64) -> None:
     metadata = f"""<?xml version="1.0" encoding="utf-8"?>
 <SketchupMaterial Version="4">
   <DiffuseColor>#405060</DiffuseColor><Opacity>0.6</Opacity>
@@ -58,7 +58,7 @@ def _enscape_material_package(path: Path, *, relief_type: str = "NORMAL") -> Non
   <Roughness>0.72</Roughness><Metallic>0.31</Metallic><Specular>0.42</Specular>
   <IndexOfRefraction>1.61</IndexOfRefraction>
   <EmissiveColor>#102030</EmissiveColor><EmissiveStrength>2.5</EmissiveStrength>
-  <BumpAmount>0.64</BumpAmount><NormalMapIntensity>0.83</NormalMapIntensity>
+  <BumpAmount>{bump_amount}</BumpAmount><NormalMapIntensity>0.83</NormalMapIntensity>
   <BumpMapType>{relief_type}</BumpMapType>
   <BumpTexture><Filepath>C:\\maps\\normal.png</Filepath><Brightness>0.8</Brightness><IsInverted>true</IsInverted></BumpTexture>
   <RoughnessTexture>
@@ -148,6 +148,18 @@ def test_maps_enscape_displacement_to_its_own_texture_slot(tmp_path: Path) -> No
     assert material.displacement_texture is not None
     assert material.displacement_texture.filename == "normal.png"
     assert material.normal_texture is None
+
+
+@pytest.mark.parametrize("relief", ["BUMP", "DISPLACEMENT"])
+def test_negative_enscape_height_amounts_retain_relief_direction(tmp_path, relief) -> None:
+    path = tmp_path / "negative.skm"
+    _enscape_material_package(path, relief_type=relief, bump_amount=-0.75)
+
+    material = skppy.load_material(path, import_vray_materials=True)
+
+    assert material.bump_strength == pytest.approx(-0.75)
+    if relief == "DISPLACEMENT":
+        assert material.displacement_scale == pytest.approx(-0.75)
 
 
 def test_accepts_explicit_ref_texture_path(tmp_path: Path) -> None:
