@@ -40,6 +40,7 @@ class BlenderMaterialBuilder:
             cls._set_principled_input(bsdf, "Metallic", mat.metallic)
             cls._set_principled_input(bsdf, "Roughness", mat.roughness)
             cls._set_principled_input(bsdf, "IOR", mat.ior)
+            cls._set_first_principled_input(bsdf, ("Transmission Weight", "Transmission"), mat.transmission)
             cls._set_first_principled_input(bsdf, ("IOR Level", "Specular IOR Level"), mat.specular)
             emission = _linear_color(mat.emission_color)
             cls._set_first_principled_input(bsdf, ("Emission Color", "Emission"), emission)
@@ -281,6 +282,7 @@ class BlenderMaterialBuilder:
     def _store_pbr_metadata(bl_mat, mat) -> None:
         """Keep source PBR parameters and missing map references inspectable."""
         values = {
+            "skppy_transmission": mat.transmission,
             "skppy_texture_fade": mat.texture_fade,
             "skppy_tint_color": (mat.tint_color.r, mat.tint_color.g, mat.tint_color.b),
             "skppy_specular": mat.specular,

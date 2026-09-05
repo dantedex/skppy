@@ -71,6 +71,7 @@ samples. No external renderer or plugin is needed.
 | `TintColor`, `ImageFade` | Multiply the diffuse image by its tint, then blend it with the untextured base color |
 | `Metallic`, `Roughness`, `Specular` | Metallic, roughness, and specular scalar values |
 | `IndexOfRefraction` | Principled IOR |
+| `TypeV5=GLASS` (or `Type=GLASS`) | Glass opacity becomes transmission (`1 - Opacity`); surface alpha remains opaque so reflections survive |
 | `EmissiveColor`, `EmissiveStrength` | Emission color and strength |
 | `DiffuseTexture` | Embedded diffuse image; retain the SketchUp image when the replacement is missing |
 | Texture `Source=SKETCHUP` | Use the material's own embedded image, ignoring a stale renderer filename |
@@ -81,11 +82,17 @@ samples. No external renderer or plugin is needed.
 | `Brightness`, `IsInverted` | Preserved per map; applied to diffuse and scalar-map node chains |
 
 Enscape metallic **maps** are not decoded, despite the shared `Material` model
-having a `metallic_texture` slot. Glass/transmission, water, grass, foliage,
+having a `metallic_texture` slot. Water, grass, foliage,
 clearcoat and explicit per-map size/rotation are not
 translated. Map UVs use the existing SketchUp texture scale. Normal-map color
 brightness/inversion is retained as metadata but is not applied to normal
 vectors; normal intensity is supported. Enscape export is not implemented.
+
+Glass uses a Principled transmission approximation, with imported roughness
+and IOR. It does not reproduce Enscape's thin/solid-glass distinction or
+renderer-specific caustics. Refraction quality depends on Blender's render
+engine, settings, and the imported geometry. The newer `TypeV5` field takes
+precedence over its older `Type` fallback, as observed in version-5 materials.
 
 The tint/image-fade conversion follows the controls described in the
 [Enscape material manual](https://docs-chaos.atlassian.net/wiki/spaces/enscape/pages/841252963/Material+Types).

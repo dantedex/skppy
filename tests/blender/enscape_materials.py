@@ -86,3 +86,30 @@ def run(module_name: str, pixels: bytes) -> None:
         exporter = importlib.import_module(f"{module_name}.export_builder").BlenderModelBuilder(bpy.context)
         exporter._material_for(material)
         assert any("base-color node graph" in warning for warning in exporter.warnings)
+    _run_glass(module_name)
+
+
+def _run_glass(module_name: str) -> None:
+    """Version-5 glass keeps its reflective surface instead of disappearing."""
+    xml = """<materialDocument><material name="Enscape Glass">
+      <AttributeDictionary name="Enscape.Material"><Attribute key="MaterialData"><![CDATA[
+        <SketchupMaterial Version="5"><Type>GENERIC</Type><TypeV5>GLASS</TypeV5><Opacity>0.25</Opacity>
+          <IndexOfRefraction>2.25606796116505</IndexOfRefraction><Roughness>0.238</Roughness>
+        </SketchupMaterial>
+      ]]></Attribute></AttributeDictionary>
+    </material></materialDocument>"""
+    with TemporaryDirectory(prefix="skppy-glass-") as directory:
+        path = Path(directory) / "glass.skm"
+        with zipfile.ZipFile(path, "w") as archive:
+            archive.writestr("document.xml", xml)
+        assert "FINISHED" in bpy.ops.import_scene.skp(filepath=str(path), import_vray_materials=True)
+    material = bpy.data.materials["Enscape Glass"]
+    bsdf = material.node_tree.nodes["Principled BSDF"]
+    assert bsdf.inputs["Alpha"].default_value == 1
+    assert not bsdf.inputs["Alpha"].is_linked
+    assert abs(bsdf.inputs["Transmission Weight"].default_value - 0.75) < 1e-6
+    assert abs(bsdf.inputs["IOR"].default_value - 2.25606796116505) < 1e-6
+    assert abs(bsdf.inputs["Roughness"].default_value - 0.238) < 1e-6
+    exporter = importlib.import_module(f"{module_name}.export_builder").BlenderModelBuilder(bpy.context)
+    exporter._material_for(material)
+    assert any("Transmission Weight" in warning for warning in exporter.warnings)

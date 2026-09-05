@@ -105,3 +105,28 @@ def test_modern_skp_public_loader_applies_enscape_material_xml(tmp_path) -> None
     assert material.color == skppy.Color(16, 32, 48)
     assert (material.alpha, material.roughness, material.normal_scale) == pytest.approx((0.6, 0.3, 0.7))
     assert material.normal_texture.data == b"normal pixels"
+
+
+@pytest.mark.parametrize("opacity", [0.0, 0.2, 1.0])
+@pytest.mark.parametrize("material_type", ["GENERIC", "GLASS"])
+def test_glass_transmits_light_without_removing_surface_coverage(tmp_path, opacity, material_type) -> None:
+    xml = f"""<materialDocument><material name="Glass" useTrans="1" trans="0.8">
+      <AttributeDictionary name="Enscape.Material"><Attribute key="MaterialData"><![CDATA[
+        <SketchupMaterial Version="5"><Type>GENERIC</Type><TypeV5>{material_type}</TypeV5>
+          <Opacity>{opacity}</Opacity><IndexOfRefraction>2.25606796116505</IndexOfRefraction><Roughness>0.238</Roughness>
+        </SketchupMaterial>
+      ]]></Attribute></AttributeDictionary>
+    </material></materialDocument>"""
+    path = tmp_path / "glass.skm"
+    with zipfile.ZipFile(path, "w") as archive:
+        archive.writestr("document.xml", xml)
+
+    material = skppy.load_material(path, import_vray_materials=True)
+    plain = skppy.load_material(path)
+
+    assert plain.alpha == pytest.approx(0.2)
+    assert plain.transmission == 0
+    assert material.alpha == pytest.approx(1 if material_type == "GLASS" else opacity)
+    assert material.transmission == pytest.approx(1 - opacity if material_type == "GLASS" else 0)
+    assert material.ior == pytest.approx(2.25606796116505)
+    assert material.roughness == pytest.approx(0.238)

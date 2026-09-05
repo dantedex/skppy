@@ -21,6 +21,7 @@ def validate_material_export(material: Material) -> None:
     fields = (
         "tint_color",
         "texture_fade",
+        "transmission",
         "specular",
         "ior",
         "emission_color",

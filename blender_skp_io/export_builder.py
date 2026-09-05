@@ -196,7 +196,12 @@ class BlenderModelBuilder:
             socket = bsdf.inputs.get(name)
             if socket is not None and socket.is_linked:
                 omitted.append(f"{name} map")
-        for name, default in (("IOR", 1.5), ("IOR Level", 0.5), ("Specular IOR Level", 0.5)):
+        for name, default in (
+            ("IOR", 1.5),
+            ("IOR Level", 0.5),
+            ("Specular IOR Level", 0.5),
+            ("Transmission Weight", 0.0),
+        ):
             socket = bsdf.inputs.get(name)
             if socket is not None and (socket.is_linked or abs(socket.default_value - default) > 1e-6):
                 omitted.append(name)

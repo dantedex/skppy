@@ -16,6 +16,9 @@ the project uses semantic versioning while the public API remains pre-1.0.
 
 ### Changed
 
+- Convert Enscape version-5 glass opacity to Principled transmission instead
+  of removing its surface through alpha; retain its IOR and roughness, and
+  report transmission loss when exporting to currently supported SKP formats.
 - Import Enscape texture tint and image fade, resolve `Source=SKETCHUP` from
   the owning material even when its renderer filename is stale, and convert
   material colors to Blender's linear color space. Report unsupported diffuse

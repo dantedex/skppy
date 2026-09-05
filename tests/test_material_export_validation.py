@@ -13,6 +13,7 @@ from skppy.writer.materials import material_entries
     [
         ("tint_color", skppy.Color(128, 128, 128)),
         ("texture_fade", 0.25),
+        ("transmission", 0.75),
         ("ior", 2.2),
         ("specular", 0.1),
         ("emission_color", skppy.Color(1, 2, 3)),

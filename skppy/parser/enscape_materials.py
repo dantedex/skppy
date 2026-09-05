@@ -76,6 +76,11 @@ def _apply_metadata(
     material.emission_strength = max(0.0, _float(root, "EmissiveStrength", material.emission_strength))
     material.bump_strength = max(0.0, _float(root, "BumpAmount", material.bump_strength))
     material.normal_scale = max(0.0, _float(root, "NormalMapIntensity", material.normal_scale))
+    if (_text(root, "TypeV5") or _text(root, "Type")) == "GLASS":
+        material.transmission = 1.0 - material.alpha
+        # Enscape glass opacity controls transmission, not surface coverage.
+        # Keeping alpha at zero would also remove its reflections in Blender.
+        material.alpha = 1.0
 
     sketchup_texture = material.texture
     diffuse_texture = _texture(root, "DiffuseTexture", resolve_texture, sketchup_texture=sketchup_texture)

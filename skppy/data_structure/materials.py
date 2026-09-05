@@ -113,6 +113,9 @@ class Material:
         Multiplicative diffuse texture tint. Default white.
     texture_fade : float, optional
         Diffuse image influence: 0 uses the base color, 1 uses the tinted image.
+    transmission : float, optional
+        Fraction of surface light transmitted/refracted instead of diffuse shading.
+        This is independent of cutout opacity. Default 0.0.
 
     Examples
     --------
@@ -146,3 +149,4 @@ class Material:
     displacement_texture: Optional["Texture"] = None
     tint_color: Color = field(default_factory=lambda: Color(255, 255, 255), kw_only=True)
     texture_fade: float = field(default=1.0, kw_only=True)
+    transmission: float = field(default=0.0, kw_only=True)
