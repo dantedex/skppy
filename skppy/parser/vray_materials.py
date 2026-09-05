@@ -78,8 +78,9 @@ def _apply_vray_values(material: Material, info: Mapping[str, str], encoded_plug
     if material.metallic_texture is None or _is_scalar(params.get("metalness")):
         material.metallic = _factor(_parameter_float(params, user_data, "metalness", material.metallic))
     if material.roughness_texture is None or _is_scalar(params.get("reflect_glossiness")):
-        glossiness = _parameter_float(params, user_data, "reflect_glossiness", 1.0 - material.roughness)
         use_roughness = _parameter_bool(params.get("option_use_roughness"))
+        fallback = material.roughness if use_roughness else 1.0 - material.roughness
+        glossiness = _parameter_float(params, user_data, "reflect_glossiness", fallback)
         material.roughness = _factor(glossiness if use_roughness else 1.0 - glossiness)
     ior = _parameter_float(params, user_data, "fresnel_ior", material.ior)
     if ior > 0.0:

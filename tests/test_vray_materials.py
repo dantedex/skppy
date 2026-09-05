@@ -84,6 +84,19 @@ def test_converts_vray_reflection_glossiness_to_roughness() -> None:
     assert material.roughness == pytest.approx(0.359177)
 
 
+@pytest.mark.parametrize("use_roughness", ["0", "1"])
+@pytest.mark.parametrize("value", [None, "missing_texture", "nan"])
+def test_missing_vray_roughness_preserves_existing_value(use_roughness: str, value: str | None) -> None:
+    params = {"option_use_roughness": use_roughness}
+    if value is not None:
+        params["reflect_glossiness"] = value
+    material = skppy.Material(roughness=0.2)
+    plugins = [_plugin("/Material/BRDF", "BRDFVRayMtl", params)]
+
+    assert apply_vray_attribute_dictionaries(material, _dictionaries("/Material/BRDF", plugins))
+    assert material.roughness == pytest.approx(0.2)
+
+
 def test_uses_scalar_fallbacks_when_vray_parameters_reference_textures() -> None:
     plugins = [
         _plugin("/Material", "MtlSingleBRDF", {"brdf": "/Material/BRDF"}),
