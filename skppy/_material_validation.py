@@ -22,6 +22,7 @@ def validate_material_export(material: Material) -> None:
         "tint_color",
         "texture_fade",
         "transmission",
+        "opacity_texture",
         "specular",
         "ior",
         "emission_color",

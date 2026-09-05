@@ -188,7 +188,7 @@ class BlenderModelBuilder:
 
     def _warn_material_loss(self, material: Any, bsdf: Any) -> None:
         """Make unsupported renderer conversion visible in export reports."""
-        omitted = self._texture_mapping_losses(material)
+        omitted = self._texture_graph_losses(material)
         base = bsdf.inputs.get("Base Color")
         if base is not None and base.is_linked and base.links[0].from_node.type != "TEX_IMAGE":
             omitted.append("base-color node graph")
@@ -223,15 +223,20 @@ class BlenderModelBuilder:
             self.warnings.append(f"Material {material.name!r}: export omits {', '.join(omitted)}")
 
     @staticmethod
-    def _texture_mapping_losses(material: Any) -> list[str]:
-        """Notice shader UV adjustments which are not baked into exported UVs."""
+    def _texture_graph_losses(material: Any) -> list[str]:
+        """Notice opacity graphs and UV adjustments which are not baked on export."""
+        losses = []
+        bsdf = material.node_tree.nodes["Principled BSDF"]
+        alpha = bsdf.inputs["Alpha"]
+        if alpha.is_linked and alpha.links[0].from_node.type != "TEX_IMAGE":
+            losses.append("opacity node graph")
         for node in material.node_tree.nodes:
             if node.type != "TEX_IMAGE":
                 continue
             vector = node.inputs["Vector"]
             if vector.is_linked and vector.links[0].from_node.type not in {"TEX_COORD", "UVMAP"}:
-                return ["texture mapping"]
-        return []
+                return [*losses, "texture mapping"]
+        return losses
 
     def _linked_image(self, socket: Any, visited: set[int] | None = None) -> Any | None:
         visited = visited or set()

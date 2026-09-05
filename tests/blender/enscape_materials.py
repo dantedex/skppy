@@ -102,6 +102,7 @@ def run(module_name: str, pixels: bytes) -> None:
         assert any("base-color node graph" in warning for warning in exporter.warnings)
         assert any("texture mapping" in warning for warning in exporter.warnings)
     _run_glass(module_name)
+    _run_masks(module_name, pixels)
 
 
 def _run_glass(module_name: str) -> None:
@@ -128,3 +129,47 @@ def _run_glass(module_name: str) -> None:
     exporter = importlib.import_module(f"{module_name}.export_builder").BlenderModelBuilder(bpy.context)
     exporter._material_for(material)
     assert any("Transmission Weight" in warning for warning in exporter.warnings)
+
+
+def _run_masks(module_name: str, pixels: bytes) -> None:
+    """Available explicit masks override alpha; missing masks keep opacity intact."""
+    for embedded in (False, True):
+        name = f"Enscape Mask {embedded}"
+        xml = f"""<materialDocument><material name="{name}">
+          <AttributeDictionary name="Enscape.Material"><Attribute key="MaterialData"><![CDATA[
+            <SketchupMaterial Version="5"><Opacity>0.6</Opacity><MaskTexture><Source>TEXTURE_PATH_ABSOLUTE</Source>
+              <Filepath>mask.png</Filepath><Brightness>0.8</Brightness><IsInverted>true</IsInverted>
+              <UseExplicitTransformation>true</UseExplicitTransformation><Width>0.0127</Width><Height>0.0254</Height>
+            </MaskTexture></SketchupMaterial>
+          ]]></Attribute></AttributeDictionary>
+        </material></materialDocument>"""
+        with TemporaryDirectory(prefix="skppy-mask-") as directory:
+            path = Path(directory) / "mask.skm"
+            with zipfile.ZipFile(path, "w") as archive:
+                archive.writestr("document.xml", xml)
+                if embedded:
+                    archive.writestr("ref/mask.png", pixels)
+            assert "FINISHED" in bpy.ops.import_scene.skp(filepath=str(path), import_vray_materials=True)
+        material = bpy.data.materials[name]
+        alpha = material.node_tree.nodes["Principled BSDF"].inputs["Alpha"]
+        assert material["skppy_opacity_texture"] == "mask.png"
+        assert alpha.is_linked == embedded
+        if not embedded:
+            assert abs(alpha.default_value - 0.6) < 1e-6
+            continue
+        multiply = alpha.links[0].from_node
+        assert multiply.operation == "MULTIPLY"
+        assert abs(multiply.inputs[1].default_value - 0.6) < 1e-6
+        brightness = multiply.inputs[0].links[0].from_node
+        assert brightness.operation == "MULTIPLY"
+        assert abs(brightness.inputs[1].default_value - 0.8) < 1e-6
+        invert = brightness.inputs[0].links[0].from_node
+        assert invert.operation == "SUBTRACT"
+        image_node = invert.inputs[1].links[0].from_node
+        assert image_node.image.colorspace_settings.name == "Non-Color"
+        assert bytes(image_node.image.packed_file.data) == pixels
+        assert tuple(image_node.inputs["Vector"].links[0].from_node.inputs[1].default_value) == (2, 1, 1)
+        assert material.surface_render_method == "DITHERED"
+        exporter = importlib.import_module(f"{module_name}.export_builder").BlenderModelBuilder(bpy.context)
+        exporter._material_for(material)
+        assert any("opacity node graph" in warning for warning in exporter.warnings)

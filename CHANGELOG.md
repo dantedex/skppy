@@ -16,6 +16,9 @@ the project uses semantic versioning while the public API remains pre-1.0.
 
 ### Changed
 
+- Import embedded explicit Enscape opacity masks with brightness, inversion,
+  map sizing and opacity multiplication. Preserve missing-image fallback and
+  warn about unsupported host-derived mask adjustments.
 - Preserve negative Enscape bump/displacement amounts and apply normal-map
   color brightness/inversion before normal decoding in Blender.
 - Apply Enscape explicit map width and height through independent Blender UV

@@ -94,6 +94,7 @@ def _apply_metadata(
         material.has_texture = True
     relief_type = _text(root, "BumpMapType").upper()
     material.roughness_texture = _texture(root, "RoughnessTexture", resolve_texture, sketchup_texture=sketchup_texture)
+    _apply_opacity_map(material, root, resolve_texture)
     relief_texture = _texture(root, "BumpTexture", resolve_texture, sketchup_texture=sketchup_texture)
     if relief_type == "BUMP":
         material.bump_map_type = "BUMP"
@@ -108,6 +109,21 @@ def _apply_metadata(
     else:
         material.bump_map_type = "NONE"
     return True
+
+
+def _apply_opacity_map(
+    material: Material, root: ET.Element, resolve_texture: Callable[[str, float, bool], Texture]
+) -> None:
+    """Decode an explicit grayscale mask without reinterpreting host image alpha."""
+    element = _child(root, "MaskTexture")
+    if element is None:
+        return
+    if _text(element, "Source") == "SKETCHUP":
+        # Keep the existing diffuse-alpha route. A host-derived mask's channel
+        # and adjustment semantics need independent evidence before conversion.
+        logger.warning("Enscape host-derived opacity mask adjustments are not yet supported for %r", material.name)
+        return
+    material.opacity_texture = _texture(root, "MaskTexture", resolve_texture)
 
 
 def _attribute_value(material_element: ET.Element, dictionary_name: str, key: str) -> str:

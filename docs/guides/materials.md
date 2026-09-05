@@ -76,6 +76,7 @@ samples. No external renderer or plugin is needed.
 | `DiffuseTexture` | Embedded diffuse image; retain the SketchUp image when the replacement is missing |
 | Texture `Source=SKETCHUP` | Use the material's own embedded image, ignoring a stale renderer filename |
 | `RoughnessTexture` | Non-Color roughness map |
+| Explicit `MaskTexture` | Grayscale opacity mask multiplied by material opacity; replaces diffuse image alpha when available |
 | `BumpMapType=BUMP`, `BumpAmount` | Height map through a Bump node |
 | `BumpMapType=NORMAL`, `NormalMapIntensity` | Tangent-space Normal Map node |
 | `BumpMapType=DISPLACEMENT`, `BumpAmount` | Displacement node; actual geometry displacement depends on Blender render settings |
@@ -92,6 +93,12 @@ and emit a warning. Normal-image brightness/inversion is applied before normal
 decoding, not to the resulting vector. Negative bump amounts use Blender's
 Bump inversion; negative displacement amounts retain their signed scale.
 Enscape export is not implemented.
+
+Explicit opacity masks use `Material.opacity_texture`, with independent size,
+brightness and inversion. Missing mask images retain the existing opacity or
+diffuse-alpha fallback. Host-derived masks (`Source=SKETCHUP`) currently emit a
+warning and keep the existing diffuse-alpha behavior: their channel/adjustment
+semantics have not been independently established.
 
 Glass uses a Principled transmission approximation, with imported roughness
 and IOR. It does not reproduce Enscape's thin/solid-glass distinction or

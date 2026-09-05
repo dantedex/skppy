@@ -51,6 +51,7 @@ class BlenderMaterialBuilder:
                 bl_mat["skppy_x_scale"] = mat.texture.x_scale
                 bl_mat["skppy_y_scale"] = mat.texture.y_scale
             cls._attach_pbr_textures(bl_mat, mat, bsdf)
+            has_texture_alpha = cls._attach_opacity_texture(bl_mat, mat, bsdf) or has_texture_alpha
 
         cls._store_pbr_metadata(bl_mat, mat)
 
@@ -284,6 +285,16 @@ class BlenderMaterialBuilder:
         return output
 
     @classmethod
+    def _attach_opacity_texture(cls, bl_mat, material: Material, bsdf) -> bool:
+        """Use an available grayscale mask as opacity, falling back when missing."""
+        texture = material.opacity_texture
+        if texture is None or texture.data is None:
+            return False
+        opacity = cls._attach_scalar_texture(bl_mat, texture, location=(-280, 520))
+        cls._link_texture_alpha(bl_mat.node_tree.nodes, bl_mat.node_tree.links, opacity, bsdf, material.alpha)
+        return True
+
+    @classmethod
     def _pbr_image_node(cls, bl_mat, texture, *, location: tuple[int, int]):
         image = cls._load_texture_image(texture, non_color=True)
         tex_node = cls._new_image_texture_node(bl_mat, image, location=location, uv_scale=texture.uv_scale)
@@ -308,6 +319,7 @@ class BlenderMaterialBuilder:
         for key, value in values.items():
             bl_mat[key] = value
         for slot_name in (
+            "opacity_texture",
             "metallic_texture",
             "roughness_texture",
             "bump_texture",

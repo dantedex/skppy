@@ -116,6 +116,8 @@ class Material:
     transmission : float, optional
         Fraction of surface light transmitted/refracted instead of diffuse shading.
         This is independent of cutout opacity. Default 0.0.
+    opacity_texture : Texture or None, optional
+        Grayscale opacity mask multiplied by ``alpha``; overrides diffuse image alpha.
 
     Examples
     --------
@@ -150,3 +152,4 @@ class Material:
     tint_color: Color = field(default_factory=lambda: Color(255, 255, 255), kw_only=True)
     texture_fade: float = field(default=1.0, kw_only=True)
     transmission: float = field(default=0.0, kw_only=True)
+    opacity_texture: Optional["Texture"] = field(default=None, kw_only=True)
