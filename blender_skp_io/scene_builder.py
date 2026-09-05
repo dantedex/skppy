@@ -11,7 +11,6 @@ from __future__ import annotations
 import logging
 import math
 import os
-import tempfile
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Tuple
@@ -22,6 +21,7 @@ import numpy as np
 from mathutils import Matrix, Vector
 
 from .annotation_builder import BlenderAnnotationBuilder
+from .material_builder import BlenderMaterialBuilder
 from .skppy.data_structure.openings import infer_cutting_openings
 from .skppy.exceptions import ComponentCycleError
 
@@ -115,6 +115,8 @@ class BlenderSceneBuilder:
         self._definition_map: Dict[int, Any] = {}
         # All Blender Objects created during build() - for reporting and selection
         self.created_objects: List[bpy.types.Object] = []
+        self._created_meshes: list[Any] = []
+        self._default_material = None
         self._annotation_builder = BlenderAnnotationBuilder(self)
 
     # -
@@ -154,7 +156,7 @@ class BlenderSceneBuilder:
         self._report_progress(0.97, "Finalizing materials")
         if self.import_materials:
             default_mat = self._get_default_material()
-            for mesh in bpy.data.meshes:
+            for mesh in self._created_meshes:
                 if mesh.materials and mesh.materials[0] is None:
                     mesh.materials[0] = default_mat
         self._report_progress(1.0, "Import complete")
@@ -185,323 +187,20 @@ class BlenderSceneBuilder:
 
         self._mat_by_id = {mat.id: mat for mat in self.model.materials}
 
-    @classmethod
-    def build_material(cls, mat) -> "bpy.types.Material":
-        """Create or update one Blender material from a skppy material."""
-        # Reuse by name so re-importing a source does not create ``.001``
-        # duplicates. This entry point also serves standalone SKM imports.
-        bl_mat = bpy.data.materials.get(mat.name)
-        if bl_mat is None:
-            bl_mat = bpy.data.materials.new(name=mat.name)
-        bl_mat.use_nodes = True
-
-        bsdf = bl_mat.node_tree.nodes.get("Principled BSDF")
-        has_texture_alpha = False
-        if bsdf:
-            r = mat.color.r / 255.0
-            g = mat.color.g / 255.0
-            b = mat.color.b / 255.0
-            cls._set_principled_input(bsdf, "Base Color", (r, g, b, 1.0))
-            cls._set_principled_input(bsdf, "Alpha", mat.alpha)
-            cls._set_principled_input(bsdf, "Metallic", mat.metallic)
-            cls._set_principled_input(bsdf, "Roughness", mat.roughness)
-            cls._set_principled_input(bsdf, "IOR", mat.ior)
-            cls._set_first_principled_input(bsdf, ("IOR Level", "Specular IOR Level"), mat.specular)
-            emission = (
-                mat.emission_color.r / 255.0,
-                mat.emission_color.g / 255.0,
-                mat.emission_color.b / 255.0,
-                1.0,
-            )
-            cls._set_first_principled_input(bsdf, ("Emission Color", "Emission"), emission)
-            cls._set_principled_input(bsdf, "Emission Strength", mat.emission_strength)
-
-            if mat.has_texture and mat.texture and mat.texture.data:
-                has_texture_alpha = cls._attach_texture(bl_mat, mat.texture, alpha_factor=mat.alpha)
-                bl_mat["skppy_x_scale"] = mat.texture.x_scale
-                bl_mat["skppy_y_scale"] = mat.texture.y_scale
-            cls._attach_pbr_textures(bl_mat, mat, bsdf)
-
-        cls._store_pbr_metadata(bl_mat, mat)
-
-        if mat.alpha < 1.0 or has_texture_alpha:
-            cls._set_transparency_method(bl_mat)
-        return bl_mat
-
     def _get_default_material(self) -> "bpy.types.Material":
         """Return a shared neutral gray material used as the slot-0 placeholder."""
         name = "SKP Default"
-        mat = bpy.data.materials.get(name)
+        mat = self._default_material
         if mat is None:
             mat = bpy.data.materials.new(name)
+            self._default_material = mat
             mat.use_nodes = True
             bsdf = mat.node_tree.nodes.get("Principled BSDF")
             if bsdf:
                 bsdf.inputs["Base Color"].default_value = (0.8, 0.8, 0.8, 1.0)
         return mat
 
-    @classmethod
-    def _attach_texture(
-        cls,
-        bl_mat: bpy.types.Material,
-        texture,
-        alpha_factor: float = 1.0,
-    ) -> bool:
-        """Load texture image data into a Blender image texture node.
-
-        Returns True when the loaded image alpha channel contains transparency.
-        """
-        image = cls._load_texture_image(texture)
-        tex_node = cls._new_image_texture_node(bl_mat, image, location=(-280, 200))
-
-        tree = bl_mat.node_tree
-        nodes = tree.nodes
-        links = tree.links
-        bsdf = nodes.get("Principled BSDF")
-        if bsdf:
-            cls._link_principled_input(links, tex_node.outputs.get("Color"), bsdf, "Base Color")
-            cls._link_texture_alpha(
-                nodes,
-                links,
-                tex_node.outputs.get("Alpha"),
-                bsdf,
-                alpha_factor,
-            )
-
-        return cls._image_uses_alpha(image)
-
-    @staticmethod
-    def _load_texture_image(texture, *, non_color: bool = False) -> "bpy.types.Image":
-        """Load and pack one in-memory texture image."""
-        ext = os.path.splitext(texture.filename)[1] if texture.filename else ".png"
-        tmp_fd, tmp_path = tempfile.mkstemp(suffix=ext)
-        try:
-            with os.fdopen(tmp_fd, "wb") as tmp:
-                tmp.write(texture.data)
-            image = bpy.data.images.load(tmp_path, check_existing=False)
-            # Pack while the temp file is still on disk, then rename for clarity.
-            image.pack()
-            if texture.filename:
-                image.name = os.path.basename(texture.filename)
-            image.filepath_raw = ""  # drop the now-deleted temp path
-            if non_color:
-                image.colorspace_settings.name = "Non-Color"
-        finally:
-            try:
-                os.unlink(tmp_path)
-            except OSError:
-                pass
-        return image
-
-    @staticmethod
-    def _new_image_texture_node(bl_mat, image, *, location: tuple[int, int]):
-        """Create a UV-driven image node for a packed image."""
-        tree = bl_mat.node_tree
-        nodes = tree.nodes
-        links = tree.links
-        tex_coord = nodes.new("ShaderNodeTexCoord")
-        tex_coord.location = (location[0] - 220, location[1])
-
-        tex_node = nodes.new("ShaderNodeTexImage")
-        tex_node.image = image
-        tex_node.location = location
-
-        links.new(tex_coord.outputs["UV"], tex_node.inputs["Vector"])
-        return tex_node
-
-    @classmethod
-    def _attach_pbr_textures(cls, bl_mat, mat, bsdf) -> None:
-        """Build Blender nodes for embedded scalar and relief maps."""
-        nodes = bl_mat.node_tree.nodes
-        links = bl_mat.node_tree.links
-        for index, (slot_name, socket_name) in enumerate(
-            (("metallic_texture", "Metallic"), ("roughness_texture", "Roughness"))
-        ):
-            texture = getattr(mat, slot_name)
-            if texture is None or texture.data is None:
-                continue
-            output = cls._attach_scalar_texture(bl_mat, texture, location=(-280, -40 - index * 240))
-            cls._link_principled_input(links, output, bsdf, socket_name)
-
-        normal_output = None
-        if mat.normal_texture is not None and mat.normal_texture.data is not None:
-            tex_node = cls._pbr_image_node(bl_mat, mat.normal_texture, location=(-280, -520))
-            normal_map = nodes.new("ShaderNodeNormalMap")
-            normal_map.label = "SKP Normal"
-            normal_map.location = (-40, -520)
-            normal_map.inputs["Strength"].default_value = mat.normal_scale
-            links.new(tex_node.outputs["Color"], normal_map.inputs["Color"])
-            normal_output = normal_map.outputs["Normal"]
-
-        if mat.bump_texture is not None and mat.bump_texture.data is not None:
-            height = cls._attach_scalar_texture(bl_mat, mat.bump_texture, location=(-280, -760))
-            bump = nodes.new("ShaderNodeBump")
-            bump.label = "SKP Bump"
-            bump.location = (-40, -680)
-            bump.inputs["Strength"].default_value = mat.bump_strength
-            links.new(height, bump.inputs["Height"])
-            if normal_output is not None:
-                links.new(normal_output, bump.inputs["Normal"])
-            normal_output = bump.outputs["Normal"]
-        if normal_output is not None:
-            cls._link_principled_input(links, normal_output, bsdf, "Normal")
-
-        if mat.displacement_texture is not None and mat.displacement_texture.data is not None:
-            height = cls._attach_scalar_texture(bl_mat, mat.displacement_texture, location=(-280, -1000))
-            displacement = nodes.new("ShaderNodeDisplacement")
-            displacement.label = "SKP Displacement"
-            displacement.location = (0, -920)
-            displacement.inputs["Scale"].default_value = mat.displacement_scale
-            links.new(height, displacement.inputs["Height"])
-            material_output = nodes.get("Material Output")
-            if material_output is not None:
-                links.new(displacement.outputs["Displacement"], material_output.inputs["Displacement"])
-
-    @classmethod
-    def _attach_scalar_texture(cls, bl_mat, texture, *, location: tuple[int, int]):
-        """Create a non-color texture chain with source inversion and brightness."""
-        tex_node = cls._pbr_image_node(bl_mat, texture, location=location)
-        output = tex_node.outputs["Color"]
-        nodes = bl_mat.node_tree.nodes
-        links = bl_mat.node_tree.links
-        if texture.inverted:
-            invert = nodes.new("ShaderNodeMath")
-            invert.operation = "SUBTRACT"
-            invert.label = "SKP Invert"
-            invert.inputs[0].default_value = 1.0
-            invert.location = (location[0] + 200, location[1])
-            links.new(output, invert.inputs[1])
-            output = invert.outputs["Value"]
-        if texture.brightness != 1.0:
-            multiply = nodes.new("ShaderNodeMath")
-            multiply.operation = "MULTIPLY"
-            multiply.label = "SKP Brightness"
-            multiply.inputs[1].default_value = texture.brightness
-            multiply.location = (location[0] + 400, location[1])
-            links.new(output, multiply.inputs[0])
-            output = multiply.outputs["Value"]
-        return output
-
-    @classmethod
-    def _pbr_image_node(cls, bl_mat, texture, *, location: tuple[int, int]):
-        image = cls._load_texture_image(texture, non_color=True)
-        tex_node = cls._new_image_texture_node(bl_mat, image, location=location)
-        tex_node.label = f"SKP {os.path.basename(texture.filename)}"
-        return tex_node
-
-    @staticmethod
-    def _store_pbr_metadata(bl_mat, mat) -> None:
-        """Keep source PBR parameters and missing map references inspectable."""
-        values = {
-            "skppy_specular": mat.specular,
-            "skppy_ior": mat.ior,
-            "skppy_emission_strength": mat.emission_strength,
-            "skppy_bump_map_type": mat.bump_map_type,
-            "skppy_bump_strength": mat.bump_strength,
-            "skppy_normal_scale": mat.normal_scale,
-            "skppy_displacement_scale": mat.displacement_scale,
-        }
-        for key, value in values.items():
-            bl_mat[key] = value
-        for slot_name in (
-            "metallic_texture",
-            "roughness_texture",
-            "bump_texture",
-            "normal_texture",
-            "displacement_texture",
-        ):
-            texture = getattr(mat, slot_name)
-            key = f"skppy_{slot_name}"
-            if texture is not None:
-                bl_mat[key] = texture.filename
-            elif key in bl_mat:
-                del bl_mat[key]
-
-    @staticmethod
-    def _set_principled_input(
-        bsdf: "bpy.types.Node",
-        socket_name: str,
-        value,
-    ) -> None:
-        socket = bsdf.inputs.get(socket_name)
-        if socket is not None:
-            socket.default_value = value
-
-    @staticmethod
-    def _set_first_principled_input(bsdf: "bpy.types.Node", socket_names: tuple[str, ...], value) -> None:
-        for socket_name in socket_names:
-            socket = bsdf.inputs.get(socket_name)
-            if socket is not None:
-                socket.default_value = value
-                return
-
-    @staticmethod
-    def _link_principled_input(
-        links: "bpy.types.NodeLinks",
-        output_socket,
-        bsdf: "bpy.types.Node",
-        socket_name: str,
-    ) -> None:
-        input_socket = bsdf.inputs.get(socket_name)
-        if output_socket is not None and input_socket is not None:
-            links.new(output_socket, input_socket)
-
-    @staticmethod
-    def _link_texture_alpha(
-        nodes: "bpy.types.Nodes",
-        links: "bpy.types.NodeLinks",
-        alpha_output,
-        bsdf: "bpy.types.Node",
-        alpha_factor: float,
-    ) -> None:
-        alpha_input = bsdf.inputs.get("Alpha")
-        if alpha_output is None or alpha_input is None:
-            return
-
-        if alpha_factor < 1.0:
-            multiply = nodes.new("ShaderNodeMath")
-            multiply.operation = "MULTIPLY"
-            multiply.location = (-40, -120)
-            multiply.inputs[1].default_value = alpha_factor
-            links.new(alpha_output, multiply.inputs[0])
-            links.new(multiply.outputs["Value"], alpha_input)
-            return
-
-        links.new(alpha_output, alpha_input)
-
-    @staticmethod
-    def _image_uses_alpha(image: "bpy.types.Image") -> bool:
-        """Return True when the image alpha channel contains transparency."""
-        channels = getattr(image, "channels", 0)
-        if channels < 4:
-            return False
-
-        pixels = getattr(image, "pixels", None)
-        if pixels is None:
-            return True
-
-        pixel_count = len(pixels)
-        values_np = np.empty(pixel_count, dtype=np.float32)
-        pixels.foreach_get(values_np)
-        return bool(np.any(values_np[3::channels] < 0.999))
-
-    @staticmethod
-    def _set_transparency_method(bl_mat: "bpy.types.Material") -> None:
-        # Blender 4.2+ (EEVEE Next) uses surface_render_method and supports
-        # DITHERED. Older versions use blend_method, where HASHED is the
-        # closest dithered transparency equivalent.
-        if hasattr(bl_mat, "surface_render_method"):
-            try:
-                bl_mat.surface_render_method = "DITHERED"
-                return
-            except (TypeError, ValueError):
-                bl_mat.surface_render_method = "BLENDED"
-                return
-
-        try:
-            bl_mat.blend_method = "HASHED"
-        except (TypeError, ValueError):
-            bl_mat.blend_method = "BLEND"
+    build_material = BlenderMaterialBuilder.build_material
 
     # -
     # Edge flags
@@ -594,6 +293,7 @@ class BlenderSceneBuilder:
 
         has_default_faces, mat_slot_map = self._material_slot_layout(indexed)
         mesh = bpy.data.meshes.new(prepared.name)
+        self._created_meshes.append(mesh)
         self._append_material_slots(mesh, has_default_faces, mat_slot_map)
         scaled_vertices = [
             (px * self.scale, py * self.scale, pz * self.scale) for px, py, pz in indexed.vertex_positions
