@@ -474,13 +474,24 @@ def _resolve_renderer_texture(
         inverted=inverted,
     )
     corrected_names = {**{name: name for name in zip_file.namelist()}, **zip_name_map}
-    matching_paths = sorted(
-        corrected for corrected in corrected_names if os.path.basename(corrected).casefold() == basename.casefold()
-    )
-    preferred_directory = image_directory.rstrip("/") + "/" if image_directory else ""
-    matching_paths.sort(key=lambda path: (not path.startswith(preferred_directory), path))
-    if matching_paths:
-        texture.data = _zip_read(zip_file, matching_paths[0], zip_name_map)
+    paths = [path for path in corrected_names if not path.endswith("/")]
+    directory = image_directory or f"materials/{material.name}"
+    declared = filename.replace("\\", "/")
+    candidates = [f"{directory.rstrip('/')}/{basename}"]
+    if not declared.startswith("/") and ":" not in declared and ".." not in declared.split("/"):
+        candidates.insert(0, declared.removeprefix("./"))
+    for candidate in candidates:
+        matches = [path for path in paths if path.casefold() == candidate.casefold()]
+        if candidate in matches:
+            matches = [candidate]
+        if len(matches) == 1:
+            texture.data = _zip_read(zip_file, matches[0], zip_name_map)
+            return texture
+    matches = [path for path in paths if os.path.basename(path).casefold() == basename.casefold()]
+    if len(matches) == 1:
+        texture.data = _zip_read(zip_file, matches[0], zip_name_map)
+    elif matches:
+        logger.warning("Ambiguous renderer texture %r for material %r: %s", basename, material.name, matches)
     return texture
 
 
