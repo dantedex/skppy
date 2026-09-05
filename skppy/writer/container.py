@@ -9,6 +9,7 @@ import zipfile
 from collections.abc import Mapping
 from pathlib import Path, PurePosixPath
 
+from .._atomic_io import atomic_write
 from ..data_structure.header import SkpHeader
 
 _ZIP_TIMESTAMP = (1980, 1, 1, 0, 0, 0)
@@ -57,7 +58,7 @@ def write_modern_container(
 ) -> Path:
     """Write a modern container and return its destination path."""
     path = Path(filepath)
-    path.write_bytes(build_modern_container(entries, header, compression=compression))
+    atomic_write(path, build_modern_container(entries, header, compression=compression))
     return path
 
 
@@ -74,5 +75,5 @@ def _encode_prefixed_utf16(value: str) -> bytes:
 def _validate_entry_name(name: str) -> None:
     """Reject absolute and parent-relative ZIP names at the write boundary."""
     path = PurePosixPath(name)
-    if not name or "\\" in name or path.is_absolute() or ".." in path.parts or ":" in path.parts[0]:
+    if not path.parts or "\\" in name or path.is_absolute() or ".." in path.parts or ":" in path.parts[0]:
         raise ValueError(f"Unsafe SKP ZIP entry name: {name!r}")
