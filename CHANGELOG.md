@@ -16,6 +16,10 @@ the project uses semantic versioning while the public API remains pre-1.0.
 
 ### Changed
 
+- Import Enscape texture tint and image fade, resolve `Source=SKETCHUP` from
+  the owning material even when its renderer filename is stale, and convert
+  material colors to Blender's linear color space. Report unsupported diffuse
+  node graphs during export instead of silently dropping their appearance.
 - Prefer valid Enscape metadata over V-Ray when both describe the same material;
   malformed Enscape metadata still permits the V-Ray fallback.
 - Import Enscape diffuse color, opacity, and embedded diffuse textures. Keep

@@ -6,6 +6,7 @@ from __future__ import annotations
 import math
 import xml.etree.ElementTree as ET
 from collections.abc import Callable, Iterable
+from dataclasses import replace
 
 from ..data_structure.images import Texture
 from ..data_structure.materials import Color, Material
@@ -55,13 +56,15 @@ def _apply_metadata(
     if not encoded:
         return False
     try:
-        root = parse_xml(encoded.lstrip("\ufeff").encode("utf-8"))
+        root = parse_xml(encoded.strip().lstrip("\ufeff").encode("utf-8"))
     except (ET.ParseError, UnicodeError, ValueError):
         return False
     if _local_name(root.tag) != "SketchupMaterial":
         return False
 
     material.color = _hex_color(_text(root, "DiffuseColor")) or material.color
+    material.tint_color = _hex_color(_text(root, "TintColor")) or material.tint_color
+    material.texture_fade = _factor(_float(root, "ImageFade", material.texture_fade))
     material.alpha = _factor(_float(root, "Opacity", material.alpha))
     material.metallic = _factor(_float(root, "Metallic", material.metallic))
     material.roughness = _factor(_float(root, "Roughness", material.roughness))
@@ -74,15 +77,16 @@ def _apply_metadata(
     material.bump_strength = max(0.0, _float(root, "BumpAmount", material.bump_strength))
     material.normal_scale = max(0.0, _float(root, "NormalMapIntensity", material.normal_scale))
 
-    diffuse_texture = _texture(root, "DiffuseTexture", resolve_texture)
+    sketchup_texture = material.texture
+    diffuse_texture = _texture(root, "DiffuseTexture", resolve_texture, sketchup_texture=sketchup_texture)
     # Keep the embedded SketchUp image when an external Enscape replacement is
     # unavailable. Never replace usable pixels with a missing file reference.
     if diffuse_texture is not None and diffuse_texture.data is not None:
         material.texture = diffuse_texture
         material.has_texture = True
     relief_type = _text(root, "BumpMapType").upper()
-    material.roughness_texture = _texture(root, "RoughnessTexture", resolve_texture)
-    relief_texture = _texture(root, "BumpTexture", resolve_texture)
+    material.roughness_texture = _texture(root, "RoughnessTexture", resolve_texture, sketchup_texture=sketchup_texture)
+    relief_texture = _texture(root, "BumpTexture", resolve_texture, sketchup_texture=sketchup_texture)
     if relief_type == "BUMP":
         material.bump_map_type = "BUMP"
         material.bump_texture = relief_texture
@@ -112,15 +116,21 @@ def _texture(
     root: ET.Element,
     element_name: str,
     resolve_texture: Callable[[str, float, bool], Texture],
+    *,
+    sketchup_texture: Texture | None = None,
 ) -> Texture | None:
     element = _child(root, element_name)
     if element is None:
         return None
+    brightness = max(0.0, _float(element, "Brightness", 1.0))
+    inverted = _text(element, "IsInverted").lower() == "true"
+    if _text(element, "Source") == "SKETCHUP":
+        # The host image is authoritative even when Filepath retains an older
+        # image name. Never look up that stale name in another material folder.
+        return replace(sketchup_texture, brightness=brightness, inverted=inverted) if sketchup_texture else None
     filename = _text(element, "Filepath")
     if not filename:
         return None
-    brightness = max(0.0, _float(element, "Brightness", 1.0))
-    inverted = _text(element, "IsInverted").lower() == "true"
     return resolve_texture(filename, brightness, inverted)
 
 

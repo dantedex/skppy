@@ -189,6 +189,9 @@ class BlenderModelBuilder:
     def _warn_material_loss(self, material: Any, bsdf: Any) -> None:
         """Make unsupported renderer conversion visible in export reports."""
         omitted = []
+        base = bsdf.inputs.get("Base Color")
+        if base is not None and base.is_linked and base.links[0].from_node.type != "TEX_IMAGE":
+            omitted.append("base-color node graph")
         for name in ("Metallic", "Roughness", "Normal"):
             socket = bsdf.inputs.get(name)
             if socket is not None and socket.is_linked:
@@ -199,9 +202,14 @@ class BlenderModelBuilder:
                 omitted.append(name)
         emission = bsdf.inputs.get("Emission Color")
         strength = bsdf.inputs.get("Emission Strength")
-        if emission is not None and strength is not None:
-            if emission.is_linked or strength.is_linked or (strength.default_value and any(emission.default_value[:3])):
-                omitted.append("emission")
+        if (
+            emission is not None
+            and strength is not None
+            and (
+                emission.is_linked or strength.is_linked or (strength.default_value and any(emission.default_value[:3]))
+            )
+        ):
+            omitted.append("emission")
         for node in material.node_tree.nodes:
             if node.type == "OUTPUT_MATERIAL" and node.inputs["Displacement"].is_linked:
                 omitted.append("displacement")

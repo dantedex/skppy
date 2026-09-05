@@ -19,6 +19,8 @@ def validate_material_export(material: Material) -> None:
     """Reject renderer properties that neither supported writer can preserve."""
     defaults = Material()
     fields = (
+        "tint_color",
+        "texture_fade",
         "specular",
         "ior",
         "emission_color",

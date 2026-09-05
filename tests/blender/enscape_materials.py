@@ -17,6 +17,7 @@ def run(module_name: str, pixels: bytes) -> None:
         xml = f"""<materialDocument><material name="Enscape {relief}" colorRed="10" colorGreen="20" colorBlue="30">
           <AttributeDictionary name="Enscape.Material"><Attribute key="MaterialData"><![CDATA[
             <SketchupMaterial Version="4"><DiffuseColor>#405060</DiffuseColor><Opacity>0.4</Opacity>
+              <TintColor>#8080FF</TintColor><ImageFade>0.25</ImageFade>
               <Metallic>0.7</Metallic><Roughness>0.2</Roughness><IndexOfRefraction>1.8</IndexOfRefraction>
               <EmissiveColor>#204060</EmissiveColor><EmissiveStrength>2</EmissiveStrength>
               <BumpMapType>{relief}</BumpMapType><BumpAmount>0.3</BumpAmount><NormalMapIntensity>0.6</NormalMapIntensity>
@@ -48,7 +49,14 @@ def run(module_name: str, pixels: bytes) -> None:
         assert abs(bsdf.inputs["Metallic"].default_value - 0.7) < 1e-6
         assert abs(bsdf.inputs["IOR"].default_value - 1.8) < 1e-6
         assert abs(bsdf.inputs["Emission Strength"].default_value - 2) < 1e-6
-        brightness = bsdf.inputs["Base Color"].links[0].from_node
+        fade = bsdf.inputs["Base Color"].links[0].from_node
+        assert fade.label == "SKP Image Fade" and fade.blend_type == "MIX"
+        assert abs(fade.inputs[0].default_value - 0.25) < 1e-6
+        tint = fade.inputs[2].links[0].from_node
+        assert tint.label == "SKP Texture Tint" and tint.blend_type == "MULTIPLY"
+        assert abs(tint.inputs[2].default_value[0] - 0.2158605) < 1e-6
+        assert tint.inputs[2].default_value[2] == 1
+        brightness = tint.inputs[1].links[0].from_node
         assert brightness.bl_idname == "ShaderNodeMixRGB" and brightness.blend_type == "MULTIPLY"
         assert abs(brightness.inputs[2].default_value[0] - 0.7) < 1e-6
         invert = brightness.inputs[1].links[0].from_node
@@ -75,3 +83,6 @@ def run(module_name: str, pixels: bytes) -> None:
             node = bsdf.inputs["Normal"].links[0].from_node
             assert node.bl_idname == ("ShaderNodeBump" if relief == "BUMP" else "ShaderNodeNormalMap")
             assert abs(node.inputs["Strength"].default_value - (0.3 if relief == "BUMP" else 0.6)) < 1e-6
+        exporter = importlib.import_module(f"{module_name}.export_builder").BlenderModelBuilder(bpy.context)
+        exporter._material_for(material)
+        assert any("base-color node graph" in warning for warning in exporter.warnings)

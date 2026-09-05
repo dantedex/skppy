@@ -64,3 +64,45 @@ def test_safely_defaults_invalid_enscape_fields(emission_color: str, relief_type
     assert material.bump_map_type == ("BUMP" if relief_type == "BUMP" else "NONE")
     assert material.bump_texture is None
     assert material.roughness_texture is None
+
+
+@pytest.mark.parametrize("has_texture", [False, True])
+def test_sketchup_source_uses_host_image_instead_of_stale_filename(has_texture: bool) -> None:
+    metadata = """<SketchupMaterial><DiffuseTexture><Source>SKETCHUP</Source><Filepath>stale.png</Filepath>
+      <Brightness>0.8</Brightness><IsInverted>true</IsInverted></DiffuseTexture>
+      <RoughnessTexture><Source>SKETCHUP</Source></RoughnessTexture></SketchupMaterial>"""
+    original = skppy.Texture(filename="actual.png", data=b"host pixels", x_scale=2, y_scale=3)
+    material = skppy.Material(has_texture=has_texture, texture=original if has_texture else None)
+
+    def reject_external_lookup(*args):
+        raise AssertionError("SKETCHUP source must not resolve a filename")
+
+    assert apply_enscape_xml(
+        material, _material_element(metadata), parse_xml=_parse_xml, resolve_texture=reject_external_lookup
+    )
+
+    if has_texture:
+        assert material.texture is not original
+        assert material.texture.data == material.roughness_texture.data == b"host pixels"
+        assert material.texture.filename == "actual.png"
+        assert material.texture.brightness == pytest.approx(0.8)
+        assert material.texture.inverted
+        assert (material.roughness_texture.x_scale, material.roughness_texture.y_scale) == (2, 3)
+        assert original.brightness == material.roughness_texture.brightness == 1
+        assert not original.inverted and not material.roughness_texture.inverted
+    else:
+        assert material.texture is material.roughness_texture is None
+
+
+@pytest.mark.parametrize(("fade", "expected"), [("0", 0), ("0.845", 0.845), ("2", 1), ("-1", 0), ("nan", 1)])
+def test_imports_tint_and_bounds_image_fade(fade: str, expected: float) -> None:
+    metadata = f"""<SketchupMaterial Version="5"><TintColor>#B2B2B2</TintColor><ImageFade>{fade}</ImageFade>
+      </SketchupMaterial>"""
+    material = skppy.Material()
+
+    assert apply_enscape_xml(
+        material, _material_element(metadata), parse_xml=_parse_xml, resolve_texture=_resolve_texture
+    )
+
+    assert material.tint_color == skppy.Color(178, 178, 178)
+    assert material.texture_fade == pytest.approx(expected)
