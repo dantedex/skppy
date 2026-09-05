@@ -22,6 +22,7 @@ def run(module_name: str) -> None:
 
     def position_key(position):
         return tuple(round(value, 6) for value in position)
+
     prepared = skppy.PreparedMesh(
         name="Shading regression",
         faces=[

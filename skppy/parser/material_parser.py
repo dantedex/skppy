@@ -69,6 +69,7 @@ import os
 import xml.etree.ElementTree as ET
 import zipfile
 from dataclasses import fields
+from functools import partial
 from typing import Dict, List, Mapping, Optional
 from xml.parsers import expat
 
@@ -342,10 +343,8 @@ def _parse_material_xml(
         # malformed XML or a bad ZIP CRC preserves the complete TLV fallback.
         candidate = copy.deepcopy(target)
 
-    def parse_xml(payload: bytes) -> ET.Element:
-        limit = getattr(getattr(zip_file, "limits", None), "max_xml_bytes", _MAX_MATERIAL_XML_BYTES)
-        return _parse_bounded_xml(payload, max_bytes=limit)
-
+    xml_limit = getattr(getattr(zip_file, "limits", None), "max_xml_bytes", _MAX_MATERIAL_XML_BYTES)
+    parse_xml = partial(_parse_bounded_xml, max_bytes=xml_limit)
     root = parse_xml(xml_bytes)
     ns = {"mat": _MAT_NS}
 
