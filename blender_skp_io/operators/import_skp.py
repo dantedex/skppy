@@ -219,7 +219,9 @@ class IMPORT_OT_skp(Operator, ImportHelper):
             return "model", model
         except skppy.InvalidSkpError as model_error:
             try:
-                material = skppy.load_material(filepath, import_vray_materials=import_vray_materials)
+                material = skppy.load_material(
+                    filepath, import_vray_materials=import_vray_materials, cancellation_check=cancellation_check
+                )
             except skppy.InvalidSkmError:
                 raise model_error
             return "material", material

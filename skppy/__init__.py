@@ -32,6 +32,7 @@ from importlib.metadata import PackageNotFoundError, version as _metadata_versio
 from pathlib import Path
 from typing import Literal
 
+from .load_limits import LoadLimits
 from .data_structure import (
     ArcCurve,
     ArcGeometry,
@@ -152,6 +153,7 @@ __all__ = [
     "LineStyle",
     "LinearDimension",
     "LoadCancelledError",
+    "LoadLimits",
     "Loop",
     "Material",
     "Model",

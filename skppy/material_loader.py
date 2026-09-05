@@ -6,7 +6,11 @@ from __future__ import annotations
 import os
 import xml.etree.ElementTree as ET
 import zipfile
+from collections.abc import Callable
 
+from ._bounded_io import BoundedZipFile, InputLimitError
+from ._cancellation import cancellation_scope
+from .load_limits import LoadLimits
 from .data_structure.materials import Material
 from .exceptions import InvalidSkmError
 from .parser.material_parser import _parse_material_xml, build_zip_name_map
@@ -16,6 +20,8 @@ def load_material(
     filepath: str | os.PathLike[str],
     *,
     import_vray_materials: bool = False,
+    limits: LoadLimits | None = None,
+    cancellation_check: Callable[[], bool] | None = None,
 ) -> Material:
     """Load one standalone SketchUp material package.
 
@@ -29,6 +35,10 @@ def load_material(
         Path to a SketchUp material ZIP containing ``document.xml``.
     import_vray_materials : bool, optional
         Prefer supported V-Ray and Enscape PBR values embedded in the material XML.
+    limits : LoadLimits, optional
+        Uncompressed resource and cumulative read budgets, enforced before extraction.
+    cancellation_check : callable, optional
+        Cooperative cancellation callback checked between read chunks.
 
     Returns
     -------
@@ -42,7 +52,7 @@ def load_material(
     """
     path = os.fspath(filepath)
     try:
-        with zipfile.ZipFile(path) as archive:
+        with cancellation_scope(cancellation_check), BoundedZipFile(path, limits=limits or LoadLimits()) as archive:
             xml_bytes = archive.read("document.xml")
             material = _parse_material_xml(
                 xml_bytes,
@@ -54,5 +64,5 @@ def load_material(
                 require_material=True,
             )
             return material
-    except (ET.ParseError, KeyError, TypeError, UnicodeError, ValueError, zipfile.BadZipFile) as exc:
+    except (ET.ParseError, KeyError, TypeError, UnicodeError, ValueError, zipfile.BadZipFile, InputLimitError) as exc:
         raise InvalidSkmError(f"Could not decode a valid SKM file: {path}") from exc
