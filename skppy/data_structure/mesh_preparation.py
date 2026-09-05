@@ -220,9 +220,19 @@ def _boundary_edge_lookup(loops: list[_LoopGeometry]) -> dict[tuple[int, int], i
 def _face_uvs(geometry: _FaceGeometry, positions: list[Position3D]) -> Optional[list[tuple[float, float]]]:
     """Compute projected or planar UVs only for textured appearances."""
     material = geometry.material
-    if material is None or not material.has_texture or material.texture is None:
+    if material is None:
         return None
-    texture = material.texture
+    textures = (
+        material.texture if material.has_texture else None,
+        material.metallic_texture,
+        material.roughness_texture,
+        material.normal_texture,
+        material.bump_texture,
+        material.displacement_texture,
+    )
+    texture = next((texture for texture in textures if texture is not None), None)
+    if texture is None:
+        return None
     if geometry.projection is not None:
         return geometry.projection.compute_uvs(
             positions,
