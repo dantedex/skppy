@@ -920,6 +920,7 @@ def main() -> None:
     run_material_isolation(module_name)
     run_edge_shading(module_name)
     run_texture_interchange(module_name, _png_rgba(255))
+    run_texture_interchange(module_name, _png_rgba(255), alpha=0.5)
     _clear_scene()
     _run_synthetic(module_name)
     _clear_scene()
