@@ -60,6 +60,15 @@ def test_material_load_can_be_cancelled_before_reading(tmp_path) -> None:
         skppy.load_material(tmp_path / "unused.skm", cancellation_check=lambda: True)
 
 
+def test_material_xml_parser_honors_increased_budget(tmp_path) -> None:
+    path = tmp_path / "large-metadata.skm"
+    xml = b'<materialDocument><material name="Large"/><!--' + b" " * (8 * 1024 * 1024) + b"--></materialDocument>"
+    with zipfile.ZipFile(path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr("document.xml", xml)
+    material = skppy.load_material(path, limits=skppy.LoadLimits(max_xml_bytes=len(xml)))
+    assert material.name == "Large"
+
+
 def test_chunk_reader_checks_cancellation_during_read() -> None:
     checks = iter([False, False, True])
     with cancellation_scope(lambda: next(checks)):

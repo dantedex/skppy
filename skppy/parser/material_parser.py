@@ -92,7 +92,7 @@ _MAT_NS = "http://sketchup.google.com/schemas/sketchup/1.0/material"
 _MAX_MATERIAL_XML_BYTES = 8 * 1024 * 1024
 
 
-def _parse_bounded_xml(xml_bytes: bytes) -> ET.Element:
+def _parse_bounded_xml(xml_bytes: bytes, *, max_bytes: int = _MAX_MATERIAL_XML_BYTES) -> ET.Element:
     """Parse small XML without permitting DTD or entity declarations.
 
     Material metadata is untrusted file input. Expat supplies declaration
@@ -100,8 +100,8 @@ def _parse_bounded_xml(xml_bytes: bytes) -> ET.Element:
     used by the material decoder without relying on its permissive convenience
     parser.
     """
-    if len(xml_bytes) > _MAX_MATERIAL_XML_BYTES:
-        raise ValueError(f"Material XML exceeds the maximum supported size ({_MAX_MATERIAL_XML_BYTES} bytes)")
+    if len(xml_bytes) > max_bytes:
+        raise ValueError(f"Material XML exceeds the maximum supported size ({max_bytes} bytes)")
 
     builder = ET.TreeBuilder()
     parser = expat.ParserCreate(namespace_separator="}")
@@ -342,7 +342,11 @@ def _parse_material_xml(
         # malformed XML or a bad ZIP CRC preserves the complete TLV fallback.
         candidate = copy.deepcopy(target)
 
-    root = _parse_bounded_xml(xml_bytes)
+    def parse_xml(payload: bytes) -> ET.Element:
+        limit = getattr(getattr(zip_file, "limits", None), "max_xml_bytes", _MAX_MATERIAL_XML_BYTES)
+        return _parse_bounded_xml(payload, max_bytes=limit)
+
+    root = parse_xml(xml_bytes)
     ns = {"mat": _MAT_NS}
 
     mat_el = root.find("mat:material", ns)
@@ -393,7 +397,7 @@ def _parse_material_xml(
                 image_directory=image_directory,
             )
 
-        apply_enscape_xml(candidate, mat_el, parse_xml=_parse_bounded_xml, resolve_texture=resolve_texture)
+        apply_enscape_xml(candidate, mat_el, parse_xml=parse_xml, resolve_texture=resolve_texture)
         apply_vray_xml(candidate, mat_el)
 
     if target is not None:
