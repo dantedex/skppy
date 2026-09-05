@@ -75,7 +75,8 @@ class BlenderMaterialBuilder:
         links = tree.links
         bsdf = nodes.get("Principled BSDF")
         if bsdf:
-            cls._link_principled_input(links, tex_node.outputs.get("Color"), bsdf, "Base Color")
+            color = cls._adjust_diffuse_texture(bl_mat, tex_node.outputs["Color"], texture)
+            cls._link_principled_input(links, color, bsdf, "Base Color")
             cls._link_texture_alpha(
                 nodes,
                 links,
@@ -85,6 +86,29 @@ class BlenderMaterialBuilder:
             )
 
         return cls._image_uses_alpha(image)
+
+    @staticmethod
+    def _adjust_diffuse_texture(bl_mat, output, texture):
+        """Apply renderer color adjustments without modifying the texture alpha."""
+        nodes = bl_mat.node_tree.nodes
+        links = bl_mat.node_tree.links
+        if texture.inverted:
+            invert = nodes.new("ShaderNodeInvert")
+            invert.label = "SKP Diffuse Invert"
+            invert.location = (-40, 300)
+            invert.inputs["Fac"].default_value = 1.0
+            links.new(output, invert.inputs["Color"])
+            output = invert.outputs["Color"]
+        if texture.brightness != 1.0:
+            multiply = nodes.new("ShaderNodeMixRGB")
+            multiply.blend_type = "MULTIPLY"
+            multiply.label = "SKP Diffuse Brightness"
+            multiply.location = (160, 300)
+            multiply.inputs[0].default_value = 1.0
+            multiply.inputs[2].default_value = (texture.brightness,) * 3 + (1.0,)
+            links.new(output, multiply.inputs[1])
+            output = multiply.outputs["Color"]
+        return output
 
     @staticmethod
     def _load_texture_image(texture, *, non_color: bool = False) -> "bpy.types.Image":

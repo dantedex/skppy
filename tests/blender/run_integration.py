@@ -21,6 +21,7 @@ from fixture_data import legacy_v8_bytes, modern_zip_bytes
 from material_isolation import run as run_material_isolation
 from edge_shading import run as run_edge_shading
 from texture_interchange import run as run_texture_interchange
+from enscape_materials import run as run_enscape_materials
 
 
 def _arguments() -> argparse.Namespace:
@@ -917,6 +918,7 @@ def main() -> None:
     """Install the addon and execute all requested integration scenarios."""
     args = _arguments()
     module_name = _install_extension(args.addon)
+    run_enscape_materials(module_name, _png_rgba(255))
     run_material_isolation(module_name)
     run_edge_shading(module_name)
     run_texture_interchange(module_name, _png_rgba(255))

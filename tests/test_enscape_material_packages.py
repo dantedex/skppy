@@ -1,6 +1,8 @@
 # SPDX-License-Identifier: MIT
 """Enscape appearance and renderer precedence in independent SKM packages."""
 
+import io
+import struct
 import zipfile
 
 import pytest
@@ -70,3 +72,36 @@ def test_enscape_diffuse_uses_embedded_images_and_keeps_missing_map_fallback(
     assert material.texture.brightness == pytest.approx(brightness)
     assert material.texture.inverted == (brightness != 1.0)
     assert (material.texture.x_scale, material.texture.y_scale) == (12, 24)
+
+
+def test_modern_skp_public_loader_applies_enscape_material_xml(tmp_path) -> None:
+    def record(tag: int, payload: bytes) -> bytes:
+        return struct.pack("<HI", tag, len(payload)) + payload
+
+    material = record(0x32C8, record(0x32CC, b"PBR"))
+    materials = record(0x01F7, record(0x30D4, record(0x30D5, material)))
+    model = record(0x01F4, record(0x01F5, bytes(100)) + materials)
+    xml = """<materialDocument><material name="PBR" colorRed="10" colorGreen="20" colorBlue="30">
+      <AttributeDictionary name="Enscape.Material"><Attribute key="MaterialData"><![CDATA[
+        <SketchupMaterial Version="4"><DiffuseColor>#102030</DiffuseColor><Opacity>0.6</Opacity>
+          <Roughness>0.3</Roughness><BumpMapType>NORMAL</BumpMapType><NormalMapIntensity>0.7</NormalMapIntensity>
+          <BumpTexture><Filepath>normal.png</Filepath></BumpTexture>
+        </SketchupMaterial>
+      ]]></Attribute></AttributeDictionary>
+    </material></materialDocument>"""
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w") as archive:
+        archive.writestr("model.dat", model)
+        archive.writestr("materials/PBR/material.xml", xml)
+        archive.writestr("materials/PBR/normal.png", b"normal pixels")
+    path = tmp_path / "modern.skp"
+    path.write_bytes("SketchUp Model {26.0.0}\n".encode("utf-16le") + buffer.getvalue())
+
+    plain = skppy.load(path).materials[0]
+    material = skppy.load(path, import_vray_materials=True).materials[0]
+
+    assert plain.color == skppy.Color(10, 20, 30)
+    assert plain.normal_texture is None
+    assert material.color == skppy.Color(16, 32, 48)
+    assert (material.alpha, material.roughness, material.normal_scale) == pytest.approx((0.6, 0.3, 0.7))
+    assert material.normal_texture.data == b"normal pixels"

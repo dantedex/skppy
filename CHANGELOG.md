@@ -14,6 +14,8 @@ the project uses semantic versioning while the public API remains pre-1.0.
 - Decode Enscape material attributes in legacy SKP files as well as modern
   SKP and SKM packages, respecting the configured XML size budget and reusing
   only each material's own embedded image for matching map references.
+- Apply Enscape diffuse texture brightness and inversion in Blender while
+  keeping image alpha separate and multiplying it by material opacity.
 
 ### Added
 
