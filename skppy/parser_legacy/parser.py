@@ -12,6 +12,7 @@ from __future__ import annotations
 
 from typing import BinaryIO, TypeVar, cast
 
+from ..load_limits import LoadLimits
 from ..data_structure.construction import ShadowInfo
 from ..data_structure.entities import Face
 from ..data_structure.model import Model
@@ -58,11 +59,11 @@ from .schema import ArchiveSchema
 from .model_builder import ModelBuilder
 from .entity_builder import index_archive_object_identities, populate_root_entities
 from .extensions import apply_legacy_extensions
-from ..parser.vray_materials import apply_vray_materials
 from .scene_builder import populate_scenes
 from .scene_pages import RecoveredSceneState
 from .provenance import ArchiveProvenance
 from .material_builder import (
+    apply_renderer_materials,
     collect_materials,
     material_ids_by_archive_index,
     populate_layers,
@@ -83,7 +84,9 @@ def _first_archive_object(provenance: ArchiveProvenance, object_type: type[_T]) 
     )
 
 
-def parse_legacy_model(stream: BinaryIO, *, import_vray_materials: bool = False) -> Model:
+def parse_legacy_model(
+    stream: BinaryIO, *, import_vray_materials: bool = False, limits: LoadLimits | None = None
+) -> Model:
     """
     Parse a pre-ZIP SketchUp stream into the shared :class:`Model`.
 
@@ -199,9 +202,9 @@ def parse_legacy_model(stream: BinaryIO, *, import_vray_materials: bool = False)
             objects_by_archive_index,
         )
     )
-    if import_vray_materials:
-        apply_vray_materials(model)
     apply_legacy_extensions(model)
+    if import_vray_materials:
+        apply_renderer_materials(model, max_xml_bytes=(limits or LoadLimits()).max_xml_bytes)
     return builder.finalize()
 
 
@@ -460,9 +463,10 @@ def _seed_known_archive_entries(
     session.index_table.register_new_object_tag(root_camera_tag)
 
 
-def parse_legacy_bytes(data: bytes, *, import_vray_materials: bool = False) -> Model:
+def parse_legacy_bytes(data: bytes, *, import_vray_materials: bool = False, limits: LoadLimits | None = None) -> Model:
     """Parse a pre-ZIP SketchUp byte string into a shared :class:`Model`."""
     return parse_legacy_model(
         cast(BinaryIO, LegacyArchiveBuffer(data)),
         import_vray_materials=import_vray_materials,
+        limits=limits,
     )

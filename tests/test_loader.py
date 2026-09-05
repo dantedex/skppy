@@ -72,7 +72,7 @@ def test_load_dispatches_pathlike_non_zip_to_legacy_parser(tmp_path, monkeypatch
     filepath.write_bytes(b"legacy-model")
     expected = Model()
 
-    def parse_legacy(data, *, import_vray_materials):
+    def parse_legacy(data, *, import_vray_materials, limits):
         assert data == b"legacy-model"
         assert import_vray_materials is True
         return expected
@@ -93,7 +93,7 @@ def test_load_dispatches_legacy_header_with_appended_zip_to_legacy_parser(tmp_pa
     filepath.write_bytes(payload)
     expected = Model()
 
-    def parse_legacy(data, *, import_vray_materials):
+    def parse_legacy(data, *, import_vray_materials, limits):
         assert data == payload
         assert import_vray_materials is False
         return expected

@@ -5,10 +5,32 @@ from __future__ import annotations
 
 import math
 import xml.etree.ElementTree as ET
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 
 from ..data_structure.images import Texture
 from ..data_structure.materials import Color, Material
+from ..data_structure.model_metadata import AttributeDictionary
+
+
+def apply_enscape_attributes(
+    material: Material,
+    dictionaries: Iterable[AttributeDictionary],
+    *,
+    parse_xml: Callable[[bytes], ET.Element],
+    resolve_texture: Callable[[str, float, bool], Texture],
+) -> bool:
+    """Apply Enscape metadata retained in legacy material attribute dictionaries."""
+    encoded = next(
+        (
+            entry.string_value
+            for dictionary in dictionaries
+            if dictionary.name == "Enscape.Material"
+            for entry in dictionary.entries
+            if entry.key == "MaterialData" and entry.value_type == 3
+        ),
+        "",
+    )
+    return _apply_metadata(material, encoded, parse_xml=parse_xml, resolve_texture=resolve_texture)
 
 
 def apply_enscape_xml(
@@ -20,6 +42,16 @@ def apply_enscape_xml(
 ) -> bool:
     """Apply an ``Enscape.Material`` dictionary and report whether it was valid."""
     encoded = _attribute_value(material_element, "Enscape.Material", "MaterialData")
+    return _apply_metadata(material, encoded, parse_xml=parse_xml, resolve_texture=resolve_texture)
+
+
+def _apply_metadata(
+    material: Material,
+    encoded: str,
+    *,
+    parse_xml: Callable[[bytes], ET.Element],
+    resolve_texture: Callable[[str, float, bool], Texture],
+) -> bool:
     if not encoded:
         return False
     try:

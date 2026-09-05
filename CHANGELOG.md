@@ -11,6 +11,9 @@ the project uses semantic versioning while the public API remains pre-1.0.
   malformed Enscape metadata still permits the V-Ray fallback.
 - Import Enscape diffuse color, opacity, and embedded diffuse textures. Keep
   the SketchUp texture when the renderer's replacement image is unavailable.
+- Decode Enscape material attributes in legacy SKP files as well as modern
+  SKP and SKM packages, respecting the configured XML size budget and reusing
+  only each material's own embedded image for matching map references.
 
 ### Added
 
