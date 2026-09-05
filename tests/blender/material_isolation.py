@@ -39,3 +39,31 @@ def run(module_name: str) -> None:
     assert len(mesh.uv_layers) == 1
     assert tuple(mesh.uv_layers.active.data[2].uv) == (1.0, 0.5)
     assert unrelated_mesh.materials[0] is None
+
+    kinds = ("objects", "collections", "meshes", "curves", "cameras", "materials", "images")
+    previous = {kind: set(getattr(bpy.data, kind)) for kind in kinds}
+
+    def fail_after_geometry(fraction, message):
+        if fraction >= 0.8:
+            raise RuntimeError("injected build failure")
+
+    failing = builder_type(model, bpy.context, progress_callback=fail_after_geometry)
+    try:
+        failing.build()
+    except RuntimeError as error:
+        assert str(error) == "injected build failure"
+    else:
+        raise AssertionError("failure injection was not reached")
+    assert previous == {kind: set(getattr(bpy.data, kind)) for kind in kinds}
+
+    broken = skppy.Material(
+        name="Broken image", has_texture=True, texture=skppy.Texture(filename="bad.png", data=b"bad")
+    )
+    try:
+        builder_type.build_material(broken)
+    except ValueError as error:
+        assert "Could not decode texture" in str(error)
+        pass
+    else:
+        raise AssertionError("invalid image unexpectedly loaded")
+    assert previous == {kind: set(getattr(bpy.data, kind)) for kind in kinds}

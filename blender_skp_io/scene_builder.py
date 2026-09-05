@@ -22,6 +22,7 @@ from mathutils import Matrix, Vector
 
 from .annotation_builder import BlenderAnnotationBuilder
 from .material_builder import BlenderMaterialBuilder
+from .import_transaction import import_transaction
 from .skppy.data_structure.openings import infer_cutting_openings
 from .skppy.exceptions import ComponentCycleError
 
@@ -125,6 +126,11 @@ class BlenderSceneBuilder:
 
     def build(self) -> None:
         """Build the full scene."""
+        with import_transaction():
+            self._build_scene_data()
+
+    def _build_scene_data(self) -> None:
+        """Create data-blocks inside the import transaction."""
         self._report_progress(0.0, "Preparing Blender scene")
         filepath = getattr(getattr(self.model, "document", None), "filepath", None)
         col_name = os.path.splitext(os.path.basename(filepath))[0] if filepath else "SKP Import"
@@ -173,7 +179,7 @@ class BlenderSceneBuilder:
     def _build_materials(self) -> None:
         material_count = len(self.model.materials)
         for material_index, mat in enumerate(self.model.materials, start=1):
-            bl_mat = self.build_material(mat)
+            bl_mat = BlenderMaterialBuilder.build_material(mat)
 
             self._bl_materials[mat.id] = bl_mat
             self._bl_mat_by_name[mat.name] = bl_mat
@@ -200,7 +206,11 @@ class BlenderSceneBuilder:
                 bsdf.inputs["Base Color"].default_value = (0.8, 0.8, 0.8, 1.0)
         return mat
 
-    build_material = BlenderMaterialBuilder.build_material
+    @staticmethod
+    def build_material(mat) -> "bpy.types.Material":
+        """Build a standalone material with failure cleanup."""
+        with import_transaction():
+            return BlenderMaterialBuilder.build_material(mat)
 
     # -
     # Edge flags

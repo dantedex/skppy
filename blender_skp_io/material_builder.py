@@ -91,6 +91,8 @@ class BlenderMaterialBuilder:
             with os.fdopen(tmp_fd, "wb") as tmp:
                 tmp.write(texture.data)
             image = bpy.data.images.load(tmp_path, check_existing=False)
+            if not all(image.size):
+                raise ValueError(f"Could not decode texture {texture.filename!r}")
             # Pack while the temp file is still on disk, then rename for clarity.
             image.pack()
             if texture.filename:
