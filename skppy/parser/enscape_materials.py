@@ -29,6 +29,8 @@ def apply_enscape_xml(
     if _local_name(root.tag) != "SketchupMaterial":
         return False
 
+    material.color = _hex_color(_text(root, "DiffuseColor")) or material.color
+    material.alpha = _factor(_float(root, "Opacity", material.alpha))
     material.metallic = _factor(_float(root, "Metallic", material.metallic))
     material.roughness = _factor(_float(root, "Roughness", material.roughness))
     material.specular = _factor(_float(root, "Specular", material.specular))
@@ -40,6 +42,12 @@ def apply_enscape_xml(
     material.bump_strength = max(0.0, _float(root, "BumpAmount", material.bump_strength))
     material.normal_scale = max(0.0, _float(root, "NormalMapIntensity", material.normal_scale))
 
+    diffuse_texture = _texture(root, "DiffuseTexture", resolve_texture)
+    # Keep the embedded SketchUp image when an external Enscape replacement is
+    # unavailable. Never replace usable pixels with a missing file reference.
+    if diffuse_texture is not None and diffuse_texture.data is not None:
+        material.texture = diffuse_texture
+        material.has_texture = True
     relief_type = _text(root, "BumpMapType").upper()
     material.roughness_texture = _texture(root, "RoughnessTexture", resolve_texture)
     relief_texture = _texture(root, "BumpTexture", resolve_texture)

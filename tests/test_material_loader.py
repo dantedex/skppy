@@ -53,6 +53,7 @@ def _material_package(
 def _enscape_material_package(path: Path, *, relief_type: str = "NORMAL") -> None:
     metadata = f"""<?xml version="1.0" encoding="utf-8"?>
 <SketchupMaterial Version="4">
+  <DiffuseColor>#405060</DiffuseColor><Opacity>0.6</Opacity>
   <Roughness>0.72</Roughness><Metallic>0.31</Metallic><Specular>0.42</Specular>
   <IndexOfRefraction>1.61</IndexOfRefraction>
   <EmissiveColor>#102030</EmissiveColor><EmissiveStrength>2.5</EmissiveStrength>
@@ -113,6 +114,8 @@ def test_loads_opt_in_enscape_pbr_values_and_embedded_maps(tmp_path: Path) -> No
     assert (material.metallic, material.roughness, material.specular, material.ior) == pytest.approx(
         (0.31, 0.72, 0.42, 1.61)
     )
+    assert material.color == skppy.Color(64, 80, 96)
+    assert material.alpha == pytest.approx(0.6)
     assert material.emission_color == skppy.Color(16, 32, 48)
     assert material.emission_strength == pytest.approx(2.5)
     assert material.bump_map_type == "NORMAL"

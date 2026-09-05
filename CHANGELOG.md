@@ -5,6 +5,13 @@ the project uses semantic versioning while the public API remains pre-1.0.
 
 ## Unreleased
 
+### Changed
+
+- Prefer valid Enscape metadata over V-Ray when both describe the same material;
+  malformed Enscape metadata still permits the V-Ray fallback.
+- Import Enscape diffuse color, opacity, and embedded diffuse textures. Keep
+  the SketchUp texture when the renderer's replacement image is unavailable.
+
 ### Added
 
 - Import opt-in Enscape PBR metadata from standalone SKM packages and modern
