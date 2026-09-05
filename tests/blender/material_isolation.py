@@ -56,6 +56,21 @@ def run(module_name: str) -> None:
         raise AssertionError("failure injection was not reached")
     assert previous == {kind: set(getattr(bpy.data, kind)) for kind in kinds}
 
+    exporter_type = importlib.import_module(f"{module_name}.export_builder").BlenderModelBuilder
+    rich = skppy.Material(name="Export warning", ior=2.0, emission_color=skppy.Color(1, 2, 3), emission_strength=2)
+    rich_blender = builder_type.build_material(rich)
+    bsdf = rich_blender.node_tree.nodes["Principled BSDF"]
+    image_node = rich_blender.node_tree.nodes.new("ShaderNodeTexImage")
+    rich_blender.node_tree.links.new(image_node.outputs["Color"], bsdf.inputs["Roughness"])
+    exporter = exporter_type(bpy.context)
+    exporter._material_for(rich_blender)
+    assert len(exporter.warnings) == 1
+    assert "Roughness map" in exporter.warnings[0] and "IOR" in exporter.warnings[0]
+    assert "emission" in exporter.warnings[0]
+    exporter._material_for(rich_blender)
+    assert len(exporter.warnings) == 1
+
+    previous = {kind: set(getattr(bpy.data, kind)) for kind in kinds}
     broken = skppy.Material(
         name="Broken image", has_texture=True, texture=skppy.Texture(filename="bad.png", data=b"bad")
     )
@@ -63,7 +78,6 @@ def run(module_name: str) -> None:
         builder_type.build_material(broken)
     except ValueError as error:
         assert "Could not decode texture" in str(error)
-        pass
     else:
         raise AssertionError("invalid image unexpectedly loaded")
     assert previous == {kind: set(getattr(bpy.data, kind)) for kind in kinds}
