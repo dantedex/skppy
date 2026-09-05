@@ -114,6 +114,12 @@ image basename and face UV channel as the native SketchUp texture.
 
 ## Tags, cameras, and text
 
+The export material subset is Base Color, Alpha, Metallic, Roughness, and the
+base-color image. Import support for renderer maps does not imply export
+support for those maps. The Python writer rejects unsupported public material
+properties rather than silently discarding them; it also rejects duplicate
+material names. V-Ray export does not broaden this subset.
+
 An object's `skppy_layer_name` string takes precedence over collection mapping.
 Otherwise the first collection becomes its SketchUp tag. Collection visibility
 initializes tag visibility.

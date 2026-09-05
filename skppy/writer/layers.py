@@ -6,6 +6,7 @@ from __future__ import annotations
 import struct
 from collections.abc import Iterable, Mapping
 
+from .._material_validation import validate_material_export
 from ..data_structure.layers import Layer, LayerFolder
 from ..data_structure.materials import Color, Material
 from ..data_structure.model_metadata import AttributeDictionary
@@ -113,6 +114,7 @@ def _encode_layer(
 def _display_material(layer: Layer, material_id: int) -> Material:
     if layer.material is not None:
         source = layer.material
+        validate_material_export(source)
         return Material(
             id=material_id,
             name=source.name,
