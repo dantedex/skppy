@@ -135,9 +135,8 @@ def test_layer_folder_parser_skips_other_records_and_rejects_bad_width():
 
 
 def test_material_security_zip_and_xml_fallback_helpers(monkeypatch):
-    monkeypatch.setattr(material_parser, "_MAX_MATERIAL_XML_BYTES", 1)
     with pytest.raises(ValueError, match="exceeds the maximum"):
-        material_parser._parse_bounded_xml(b"xx")
+        material_parser._parse_bounded_xml(b"xx", max_bytes=1)
 
     fake_zip = SimpleNamespace(
         infolist=lambda: [
