@@ -37,7 +37,12 @@ def _resolve_material_texture(material: Material, filename: str, brightness: flo
     if base is not None:
         matches = base.filename.replace("\\", "/").split("/")[-1].casefold() == basename.casefold()
         return replace(
-            base, filename=basename, brightness=brightness, inverted=inverted, data=base.data if matches else None
+            base,
+            filename=basename,
+            brightness=brightness,
+            inverted=inverted,
+            data=base.data if matches else None,
+            uv_scale=(1.0, 1.0),
         )
     return Texture(filename=basename, brightness=brightness, inverted=inverted)
 

@@ -42,5 +42,7 @@ def validate_material_export(material: Material) -> None:
             unsupported.append("texture.brightness")
         if material.texture.inverted:
             unsupported.append("texture.inverted")
+        if material.texture.uv_scale != (1.0, 1.0):
+            unsupported.append("texture.uv_scale")
     if unsupported:
         raise ValueError(f"Material {material.name!r} has unsupported export properties: {', '.join(unsupported)}")

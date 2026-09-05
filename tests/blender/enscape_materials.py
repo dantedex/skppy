@@ -22,8 +22,10 @@ def run(module_name: str, pixels: bytes) -> None:
               <EmissiveColor>#204060</EmissiveColor><EmissiveStrength>2</EmissiveStrength>
               <BumpMapType>{relief}</BumpMapType><BumpAmount>0.3</BumpAmount><NormalMapIntensity>0.6</NormalMapIntensity>
               <DiffuseTexture><Filepath>diffuse.png</Filepath><Brightness>0.7</Brightness><IsInverted>true</IsInverted>
+                <UseExplicitTransformation>true</UseExplicitTransformation><Width>0.0127</Width><Height>0.0254</Height>
               </DiffuseTexture>
               <RoughnessTexture><Filepath>roughness.png</Filepath><Brightness>0.8</Brightness><IsInverted>true</IsInverted>
+                <UseExplicitTransformation>true</UseExplicitTransformation><Width>0.0254</Width><Height>0.00635</Height>
               </RoughnessTexture>
               <BumpTexture><Filepath>relief.png</Filepath></BumpTexture>
             </SketchupMaterial>
@@ -63,6 +65,9 @@ def run(module_name: str, pixels: bytes) -> None:
         assert invert.bl_idname == "ShaderNodeInvert"
         diffuse = invert.inputs["Color"].links[0].from_node
         assert diffuse.image.colorspace_settings.name == "sRGB"
+        mapping = diffuse.inputs["Vector"].links[0].from_node
+        assert mapping.operation == "MULTIPLY"
+        assert tuple(mapping.inputs[1].default_value) == (2, 1, 1)
         alpha = bsdf.inputs["Alpha"].links[0].from_node
         assert alpha.bl_idname == "ShaderNodeMath" and alpha.operation == "MULTIPLY"
         assert abs(alpha.inputs[1].default_value - 0.4) < 1e-6
@@ -71,6 +76,8 @@ def run(module_name: str, pixels: bytes) -> None:
         assert roughness.operation == "MULTIPLY"
         assert abs(roughness.inputs[1].default_value - 0.8) < 1e-6
         assert roughness.inputs[0].links[0].from_node.operation == "SUBTRACT"
+        rough_image = roughness.inputs[0].links[0].from_node.inputs[1].links[0].from_node
+        assert tuple(rough_image.inputs["Vector"].links[0].from_node.inputs[1].default_value) == (1, 4, 1)
         images = [node.image for node in nodes if node.bl_idname == "ShaderNodeTexImage"]
         assert len(images) == 3
         assert all(image.packed_file and bytes(image.packed_file.data) == pixels for image in images)
@@ -86,6 +93,7 @@ def run(module_name: str, pixels: bytes) -> None:
         exporter = importlib.import_module(f"{module_name}.export_builder").BlenderModelBuilder(bpy.context)
         exporter._material_for(material)
         assert any("base-color node graph" in warning for warning in exporter.warnings)
+        assert any("texture mapping" in warning for warning in exporter.warnings)
     _run_glass(module_name)
 
 

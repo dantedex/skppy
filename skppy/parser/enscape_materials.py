@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import math
+import logging
 import xml.etree.ElementTree as ET
 from collections.abc import Callable, Iterable
 from dataclasses import replace
@@ -11,6 +12,8 @@ from dataclasses import replace
 from ..data_structure.images import Texture
 from ..data_structure.materials import Color, Material
 from ..data_structure.model_metadata import AttributeDictionary
+
+logger = logging.getLogger(__name__)
 
 
 def apply_enscape_attributes(
@@ -132,11 +135,27 @@ def _texture(
     if _text(element, "Source") == "SKETCHUP":
         # The host image is authoritative even when Filepath retains an older
         # image name. Never look up that stale name in another material folder.
-        return replace(sketchup_texture, brightness=brightness, inverted=inverted) if sketchup_texture else None
+        texture = replace(sketchup_texture, brightness=brightness, inverted=inverted) if sketchup_texture else None
+        return _apply_texture_size(texture, element)
     filename = _text(element, "Filepath")
     if not filename:
         return None
-    return resolve_texture(filename, brightness, inverted)
+    return _apply_texture_size(resolve_texture(filename, brightness, inverted), element)
+
+
+def _apply_texture_size(texture: Texture | None, element: ET.Element) -> Texture | None:
+    """Convert observed meter tile sizes without changing the shared mesh UV basis."""
+    if texture is None or _text(element, "UseExplicitTransformation").lower() != "true":
+        return texture
+    width = _float(element, "Width", 0.0)
+    height = _float(element, "Height", 0.0)
+    if width <= 1e-12 or height <= 1e-12:
+        logger.warning("Invalid Enscape texture size for %r; retaining SketchUp mapping", texture.filename)
+        return texture
+    texture.uv_scale = (texture.x_scale * 0.0254 / width, texture.y_scale * 0.0254 / height)
+    if _float(element, "Rotation", 0.0) != 0.0:
+        logger.warning("Enscape texture rotation is not yet supported for %r", texture.filename)
+    return texture
 
 
 def _float(parent: ET.Element, name: str, default: float) -> float:

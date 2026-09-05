@@ -16,6 +16,9 @@ the project uses semantic versioning while the public API remains pre-1.0.
 
 ### Changed
 
+- Apply Enscape explicit map width and height through independent Blender UV
+  multipliers. Preserve mesh UVs, reject invalid dimensions, and report
+  unsupported nonzero rotation and texture-mapping loss on export.
 - Convert Enscape version-5 glass opacity to Principled transmission instead
   of removing its surface through alpha; retain its IOR and roughness, and
   report transmission loss when exporting to currently supported SKP formats.

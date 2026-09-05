@@ -64,7 +64,7 @@ def test_material_resources_reject_duplicate_names_and_reserved_image_name() -> 
         material_entries([material])
 
 
-@pytest.mark.parametrize(("field", "value"), [("brightness", 0.5), ("inverted", True)])
+@pytest.mark.parametrize(("field", "value"), [("brightness", 0.5), ("inverted", True), ("uv_scale", (2.0, 3.0))])
 def test_export_rejects_unrepresented_base_image_adjustments(field, value) -> None:
     material = skppy.Material(name="Adjusted", has_texture=True, texture=skppy.Texture(filename="a.png", data=b"x"))
     setattr(material.texture, field, value)

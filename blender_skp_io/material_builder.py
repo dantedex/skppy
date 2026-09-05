@@ -71,7 +71,7 @@ class BlenderMaterialBuilder:
         texture = material.texture
         assert texture is not None  # The caller checks the embedded image slot.
         image = cls._load_texture_image(texture)
-        tex_node = cls._new_image_texture_node(bl_mat, image, location=(-280, 200))
+        tex_node = cls._new_image_texture_node(bl_mat, image, location=(-280, 200), uv_scale=texture.uv_scale)
 
         tree = bl_mat.node_tree
         nodes = tree.nodes
@@ -183,7 +183,9 @@ class BlenderMaterialBuilder:
         return image
 
     @staticmethod
-    def _new_image_texture_node(bl_mat, image, *, location: tuple[int, int]):
+    def _new_image_texture_node(
+        bl_mat, image, *, location: tuple[int, int], uv_scale: tuple[float, float] = (1.0, 1.0)
+    ):
         """Create a UV-driven image node for a packed image."""
         tree = bl_mat.node_tree
         nodes = tree.nodes
@@ -195,7 +197,15 @@ class BlenderMaterialBuilder:
         tex_node.image = image
         tex_node.location = location
 
-        links.new(tex_coord.outputs["UV"], tex_node.inputs["Vector"])
+        vector = tex_coord.outputs["UV"]
+        if uv_scale != (1.0, 1.0):
+            mapping = nodes.new("ShaderNodeVectorMath")
+            mapping.operation = "MULTIPLY"
+            mapping.label = "SKP Texture Size"
+            mapping.inputs[1].default_value = (*uv_scale, 1.0)
+            links.new(vector, mapping.inputs[0])
+            vector = mapping.outputs["Vector"]
+        links.new(vector, tex_node.inputs["Vector"])
         return tex_node
 
     @classmethod
@@ -274,7 +284,7 @@ class BlenderMaterialBuilder:
     @classmethod
     def _pbr_image_node(cls, bl_mat, texture, *, location: tuple[int, int]):
         image = cls._load_texture_image(texture, non_color=True)
-        tex_node = cls._new_image_texture_node(bl_mat, image, location=location)
+        tex_node = cls._new_image_texture_node(bl_mat, image, location=location, uv_scale=texture.uv_scale)
         tex_node.label = f"SKP {os.path.basename(texture.filename)}"
         return tex_node
 
