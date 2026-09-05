@@ -45,6 +45,16 @@ vectors, presentation fields, and associations. Annotation anchors may refer to
 root entities or leaves reached through nested component-instance paths.
 Unsupported legacy-only state is rejected instead of producing a lossy file.
 
+Material export supports base color, opacity, metallic/roughness factors, and
+an unadjusted base-color image. Additional renderer properties (including IOR,
+emission and auxiliary maps) raise `ValueError` when set to unsupported values,
+even with V-Ray export enabled. Material names must be unique. Resolve these
+errors explicitly rather than assuming that everything imported can be saved.
+
+Saving replaces the destination only after serialization and writing complete.
+A failed write leaves an existing destination intact and removes its temporary
+file. Existing file permission bits and symlink targets are retained.
+
 Generated geometry, materials, texture resources, layers, nested components,
 and model metadata have been validated by opening the resulting files through
 the public SketchUp C API.

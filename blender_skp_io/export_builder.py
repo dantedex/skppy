@@ -170,6 +170,7 @@ class BlenderModelBuilder:
         if material.use_nodes and material.node_tree is not None:
             bsdf = material.node_tree.nodes.get("Principled BSDF")
             if bsdf is not None:
+                self._warn_material_loss(material, bsdf)
                 base = bsdf.inputs.get("Base Color")
                 alpha_input = bsdf.inputs.get("Alpha")
                 metallic_input = bsdf.inputs.get("Metallic")
@@ -184,6 +185,29 @@ class BlenderModelBuilder:
                 if roughness_input is not None:
                     roughness = float(roughness_input.default_value)
         return base_color, metallic, roughness, alpha, image
+
+    def _warn_material_loss(self, material: Any, bsdf: Any) -> None:
+        """Make unsupported renderer conversion visible in export reports."""
+        omitted = []
+        for name in ("Metallic", "Roughness", "Normal"):
+            socket = bsdf.inputs.get(name)
+            if socket is not None and socket.is_linked:
+                omitted.append(f"{name} map")
+        for name, default in (("IOR", 1.5), ("IOR Level", 0.5), ("Specular IOR Level", 0.5)):
+            socket = bsdf.inputs.get(name)
+            if socket is not None and (socket.is_linked or abs(socket.default_value - default) > 1e-6):
+                omitted.append(name)
+        emission = bsdf.inputs.get("Emission Color")
+        strength = bsdf.inputs.get("Emission Strength")
+        if emission is not None and strength is not None:
+            if emission.is_linked or strength.is_linked or (strength.default_value and any(emission.default_value[:3])):
+                omitted.append("emission")
+        for node in material.node_tree.nodes:
+            if node.type == "OUTPUT_MATERIAL" and node.inputs["Displacement"].is_linked:
+                omitted.append("displacement")
+                break
+        if omitted:
+            self.warnings.append(f"Material {material.name!r}: export omits {', '.join(omitted)}")
 
     def _linked_image(self, socket: Any, visited: set[int] | None = None) -> Any | None:
         visited = visited or set()

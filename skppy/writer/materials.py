@@ -8,6 +8,7 @@ from collections.abc import Iterable, Mapping
 from math import isfinite
 from pathlib import PurePosixPath
 
+from .._material_validation import validate_material_export, validate_material_names
 from ..data_structure.materials import Material
 from ..data_structure.model_metadata import AttributeDictionary
 from ..parser.tlv import TlvTag
@@ -75,6 +76,8 @@ def encode_material_record(
 
 def material_entries(materials: Iterable[Material], *, export_vray_materials: bool = False) -> dict[str, bytes]:
     """Return deterministic ZIP entries containing material XML documents."""
+    materials = list(materials)
+    validate_material_names(materials)
     entries = {}
     for material in materials:
         _validate_material(material)
@@ -163,6 +166,7 @@ def encode_material_xml(material: Material, *, export_vray_materials: bool = Fal
 
 
 def _validate_materials(materials: list[Material], id_map: Mapping[int, int]) -> None:
+    validate_material_names(materials)
     ids = [material.id for material in materials]
     if any(material_id <= 0 for material_id in ids):
         raise ValueError("Material IDs must be positive")
@@ -178,7 +182,8 @@ def _validate_materials(materials: list[Material], id_map: Mapping[int, int]) ->
 
 
 def _validate_material(material: Material) -> None:
-    if not material.name or any(char in material.name for char in "/\\"):
+    validate_material_export(material)
+    if not material.name or material.name in {".", ".."} or any(char in material.name for char in "/\\"):
         raise ValueError("Material name must be non-empty and path-safe")
     channels = (
         material.color.r,
@@ -209,7 +214,7 @@ def _format_factor(value: float) -> str:
 def _texture_filename(material: Material) -> str:
     assert material.texture is not None
     filename = PurePosixPath(material.texture.filename.replace("\\", "/")).name
-    if not filename or filename in {".", ".."}:
+    if not filename or filename in {".", "..", "material.xml"}:
         raise ValueError("Texture filename must contain a safe basename")
     return filename
 

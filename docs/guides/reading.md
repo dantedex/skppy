@@ -3,6 +3,27 @@
 Practical patterns for loading and extracting data from `.skp` files. Except
 for the first snippet, the examples build on the loaded `model` variable.
 
+## Resource limits and cancellation
+
+`load()` and `load_material()` accept a `LoadLimits` value. Defaults allow 1 GiB
+per uncompressed resource (or entire legacy file), 4 GiB of cumulative ZIP
+reads, and 8 MiB per XML resource. Repeated reads count toward the cumulative
+budget. Limits constrain input bytes, not total memory used by the decoded
+geometry, images, or Python object graph.
+
+```python
+import skppy
+
+limits = skppy.LoadLimits(max_entry_bytes=256 * 1024 * 1024, max_total_bytes=1024 * 1024 * 1024)
+model = skppy.load("building.skp", limits=limits)
+```
+
+Increase limits deliberately for trusted large files. Oversized resources are
+rejected before extraction with `InvalidSkpError` or `InvalidSkmError`; inspect
+the exception's `__cause__` for the resource and budget. Both loaders also
+accept `cancellation_check`, checked between read chunks. Cancellation raises
+`LoadCancelledError` rather than becoming an invalid-file error.
+
 ---
 
 ## Basic load

@@ -18,6 +18,8 @@ for mat in model.materials:
     print(f"  alpha:     {mat.alpha:.2f}")
     print(f"  metallic:  {mat.metallic:.2f}")
     print(f"  roughness: {mat.roughness:.2f}")
+    print(f"  specular:  {mat.specular:.2f}")
+    print(f"  IOR:       {mat.ior:.2f}")
     print(f"  textured:  {mat.has_texture}")
 ```
 
@@ -43,20 +45,41 @@ extension. This also handles downloads incorrectly named `.skp` when their
 contents are actually an SKM package with `document.xml` and `ref/` resources.
 Malformed packages raise `skppy.InvalidSkmError`.
 
-Standalone packages can contain V-Ray attribute dictionaries. SketchUp color
-and texture values remain authoritative by default; pass
-`import_vray_materials=True` to prefer supported V-Ray scalar PBR values:
+Standalone packages can contain V-Ray and Enscape attribute dictionaries.
+SketchUp color and texture values remain authoritative by default; pass
+`import_vray_materials=True` to prefer supported renderer PBR values and maps:
 
 ```python
 material = skppy.load_material("stone.skm", import_vray_materials=True)
 ```
 
+The compatibility keyword retains its original name, but enables both V-Ray
+and Enscape metadata. Supported properties include metallic, roughness,
+specular, IOR, emission, bump, normal, and displacement values. Auxiliary maps
+use the `metallic_texture`, `roughness_texture`, `bump_texture`,
+`normal_texture`, and `displacement_texture` slots.
+
+Some SKM libraries reference auxiliary images through creator-machine paths
+without embedding those images. skppy retains the safe basename and renderer
+settings while leaving `texture.data` as `None`:
+
+```python
+roughness = material.roughness_texture
+if roughness:
+    print(roughness.filename, roughness.brightness, roughness.inverted)
+    if roughness.data is None:
+        print("The SKM references this map but does not contain its pixels")
+```
+
+Only archive entries are eligible for automatic loading. skppy never opens an
+absolute path serialized by another machine.
+
 ---
 
 ## Accessing texture data
 
-A texture combines physical tile size, its informational filename, and
-optional encoded image bytes:
+A texture combines physical tile size, its informational filename, optional
+encoded image bytes, and renderer brightness/inversion settings:
 
 ```python
 for mat in model.materials:

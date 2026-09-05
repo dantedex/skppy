@@ -20,7 +20,7 @@ Example
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Literal, Optional
 
 if TYPE_CHECKING:
     from .images import Texture
@@ -62,7 +62,7 @@ class Material:
     A SketchUp material.
 
     Materials define the surface appearance of faces. They can have a
-    base color, an optional texture, and PBR properties (metallic, roughness).
+    base color, texture slots, and physically based rendering properties.
 
     Parameters
     ----------
@@ -82,6 +82,33 @@ class Material:
         PBR metallic factor (0.0 to 1.0). Default 0.0.
     roughness : float, optional
         PBR roughness factor (0.0 to 1.0). Default 1.0.
+    specular : float, optional
+        Dielectric specular level (0.0 to 1.0). Default 0.5.
+    ior : float, optional
+        Index of refraction. Default 1.5.
+    emission_color : Color, optional
+        Emissive surface colour. Default black.
+    emission_strength : float, optional
+        Emissive intensity. Default 0.0.
+    bump_map_type : str, optional
+        Relief interpretation: ``NONE``, ``BUMP``, ``NORMAL``, or
+        ``DISPLACEMENT``.
+    bump_strength : float, optional
+        Height/bump strength. Default 0.0.
+    normal_scale : float, optional
+        Tangent-space normal map strength. Default 1.0.
+    displacement_scale : float, optional
+        Displacement amount. Default 0.0.
+    metallic_texture : Texture or None, optional
+        Non-color metallic map.
+    roughness_texture : Texture or None, optional
+        Non-color roughness map.
+    bump_texture : Texture or None, optional
+        Grayscale height map used for bump shading.
+    normal_texture : Texture or None, optional
+        Tangent-space normal map.
+    displacement_texture : Texture or None, optional
+        Grayscale displacement/height map.
 
     Examples
     --------
@@ -100,3 +127,16 @@ class Material:
     texture: Optional["Texture"] = None
     metallic: float = 0.0
     roughness: float = 1.0
+    specular: float = 0.5
+    ior: float = 1.5
+    emission_color: Color = field(default_factory=lambda: Color(0, 0, 0))
+    emission_strength: float = 0.0
+    bump_map_type: Literal["NONE", "BUMP", "NORMAL", "DISPLACEMENT"] = "NONE"
+    bump_strength: float = 0.0
+    normal_scale: float = 1.0
+    displacement_scale: float = 0.0
+    metallic_texture: Optional["Texture"] = None
+    roughness_texture: Optional["Texture"] = None
+    bump_texture: Optional["Texture"] = None
+    normal_texture: Optional["Texture"] = None
+    displacement_texture: Optional["Texture"] = None

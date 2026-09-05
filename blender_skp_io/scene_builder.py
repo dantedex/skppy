@@ -11,7 +11,6 @@ from __future__ import annotations
 import logging
 import math
 import os
-import tempfile
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Tuple
@@ -22,6 +21,8 @@ import numpy as np
 from mathutils import Matrix, Vector
 
 from .annotation_builder import BlenderAnnotationBuilder
+from .material_builder import BlenderMaterialBuilder
+from .import_transaction import import_transaction
 from .skppy.data_structure.openings import infer_cutting_openings
 from .skppy.exceptions import ComponentCycleError
 
@@ -115,6 +116,8 @@ class BlenderSceneBuilder:
         self._definition_map: Dict[int, Any] = {}
         # All Blender Objects created during build() - for reporting and selection
         self.created_objects: List[bpy.types.Object] = []
+        self._created_meshes: list[Any] = []
+        self._default_material = None
         self._annotation_builder = BlenderAnnotationBuilder(self)
 
     # -
@@ -123,6 +126,11 @@ class BlenderSceneBuilder:
 
     def build(self) -> None:
         """Build the full scene."""
+        with import_transaction():
+            self._build_scene_data()
+
+    def _build_scene_data(self) -> None:
+        """Create data-blocks inside the import transaction."""
         self._report_progress(0.0, "Preparing Blender scene")
         filepath = getattr(getattr(self.model, "document", None), "filepath", None)
         col_name = os.path.splitext(os.path.basename(filepath))[0] if filepath else "SKP Import"
@@ -154,7 +162,7 @@ class BlenderSceneBuilder:
         self._report_progress(0.97, "Finalizing materials")
         if self.import_materials:
             default_mat = self._get_default_material()
-            for mesh in bpy.data.meshes:
+            for mesh in self._created_meshes:
                 if mesh.materials and mesh.materials[0] is None:
                     mesh.materials[0] = default_mat
         self._report_progress(1.0, "Import complete")
@@ -171,7 +179,7 @@ class BlenderSceneBuilder:
     def _build_materials(self) -> None:
         material_count = len(self.model.materials)
         for material_index, mat in enumerate(self.model.materials, start=1):
-            bl_mat = self.build_material(mat)
+            bl_mat = BlenderMaterialBuilder.build_material(mat)
 
             self._bl_materials[mat.id] = bl_mat
             self._bl_mat_by_name[mat.name] = bl_mat
@@ -185,181 +193,24 @@ class BlenderSceneBuilder:
 
         self._mat_by_id = {mat.id: mat for mat in self.model.materials}
 
-    @classmethod
-    def build_material(cls, mat) -> "bpy.types.Material":
-        """Create or update one Blender material from a skppy material."""
-        # Reuse by name so re-importing a source does not create ``.001``
-        # duplicates. This entry point also serves standalone SKM imports.
-        bl_mat = bpy.data.materials.get(mat.name)
-        if bl_mat is None:
-            bl_mat = bpy.data.materials.new(name=mat.name)
-        bl_mat.use_nodes = True
-
-        bsdf = bl_mat.node_tree.nodes.get("Principled BSDF")
-        has_texture_alpha = False
-        if bsdf:
-            r = mat.color.r / 255.0
-            g = mat.color.g / 255.0
-            b = mat.color.b / 255.0
-            cls._set_principled_input(bsdf, "Base Color", (r, g, b, 1.0))
-            cls._set_principled_input(bsdf, "Alpha", mat.alpha)
-            cls._set_principled_input(bsdf, "Metallic", mat.metallic)
-            cls._set_principled_input(bsdf, "Roughness", mat.roughness)
-
-            if mat.has_texture and mat.texture and mat.texture.data:
-                has_texture_alpha = cls._attach_texture(bl_mat, mat.texture, alpha_factor=mat.alpha)
-                bl_mat["skppy_x_scale"] = mat.texture.x_scale
-                bl_mat["skppy_y_scale"] = mat.texture.y_scale
-
-        if mat.alpha < 1.0 or has_texture_alpha:
-            cls._set_transparency_method(bl_mat)
-        return bl_mat
-
     def _get_default_material(self) -> "bpy.types.Material":
         """Return a shared neutral gray material used as the slot-0 placeholder."""
         name = "SKP Default"
-        mat = bpy.data.materials.get(name)
+        mat = self._default_material
         if mat is None:
             mat = bpy.data.materials.new(name)
+            self._default_material = mat
             mat.use_nodes = True
             bsdf = mat.node_tree.nodes.get("Principled BSDF")
             if bsdf:
                 bsdf.inputs["Base Color"].default_value = (0.8, 0.8, 0.8, 1.0)
         return mat
 
-    @classmethod
-    def _attach_texture(
-        cls,
-        bl_mat: bpy.types.Material,
-        texture,
-        alpha_factor: float = 1.0,
-    ) -> bool:
-        """Load texture image data into a Blender image texture node.
-
-        Returns True when the loaded image alpha channel contains transparency.
-        """
-        ext = os.path.splitext(texture.filename)[1] if texture.filename else ".png"
-        tmp_fd, tmp_path = tempfile.mkstemp(suffix=ext)
-        try:
-            with os.fdopen(tmp_fd, "wb") as tmp:
-                tmp.write(texture.data)
-            image = bpy.data.images.load(tmp_path, check_existing=False)
-            # Pack while the temp file is still on disk, then rename for clarity.
-            image.pack()
-            if texture.filename:
-                image.name = os.path.basename(texture.filename)
-            image.filepath_raw = ""  # drop the now-deleted temp path
-        finally:
-            try:
-                os.unlink(tmp_path)
-            except OSError:
-                pass
-
-        tree = bl_mat.node_tree
-        nodes = tree.nodes
-        links = tree.links
-
-        # Texture Coordinate node - use UV when per-face UV data is available,
-        # with Generated as a fallback.
-        tex_coord = nodes.new("ShaderNodeTexCoord")
-        tex_coord.location = (-500, 200)
-
-        tex_node = nodes.new("ShaderNodeTexImage")
-        tex_node.image = image
-        tex_node.location = (-280, 200)
-
-        links.new(tex_coord.outputs["UV"], tex_node.inputs["Vector"])
-
-        bsdf = nodes.get("Principled BSDF")
-        if bsdf:
-            cls._link_principled_input(links, tex_node.outputs.get("Color"), bsdf, "Base Color")
-            cls._link_texture_alpha(
-                nodes,
-                links,
-                tex_node.outputs.get("Alpha"),
-                bsdf,
-                alpha_factor,
-            )
-
-        return cls._image_uses_alpha(image)
-
     @staticmethod
-    def _set_principled_input(
-        bsdf: "bpy.types.Node",
-        socket_name: str,
-        value,
-    ) -> None:
-        socket = bsdf.inputs.get(socket_name)
-        if socket is not None:
-            socket.default_value = value
-
-    @staticmethod
-    def _link_principled_input(
-        links: "bpy.types.NodeLinks",
-        output_socket,
-        bsdf: "bpy.types.Node",
-        socket_name: str,
-    ) -> None:
-        input_socket = bsdf.inputs.get(socket_name)
-        if output_socket is not None and input_socket is not None:
-            links.new(output_socket, input_socket)
-
-    @staticmethod
-    def _link_texture_alpha(
-        nodes: "bpy.types.Nodes",
-        links: "bpy.types.NodeLinks",
-        alpha_output,
-        bsdf: "bpy.types.Node",
-        alpha_factor: float,
-    ) -> None:
-        alpha_input = bsdf.inputs.get("Alpha")
-        if alpha_output is None or alpha_input is None:
-            return
-
-        if alpha_factor < 1.0:
-            multiply = nodes.new("ShaderNodeMath")
-            multiply.operation = "MULTIPLY"
-            multiply.location = (-40, -120)
-            multiply.inputs[1].default_value = alpha_factor
-            links.new(alpha_output, multiply.inputs[0])
-            links.new(multiply.outputs["Value"], alpha_input)
-            return
-
-        links.new(alpha_output, alpha_input)
-
-    @staticmethod
-    def _image_uses_alpha(image: "bpy.types.Image") -> bool:
-        """Return True when the image alpha channel contains transparency."""
-        channels = getattr(image, "channels", 0)
-        if channels < 4:
-            return False
-
-        pixels = getattr(image, "pixels", None)
-        if pixels is None:
-            return True
-
-        pixel_count = len(pixels)
-        values_np = np.empty(pixel_count, dtype=np.float32)
-        pixels.foreach_get(values_np)
-        return bool(np.any(values_np[3::channels] < 0.999))
-
-    @staticmethod
-    def _set_transparency_method(bl_mat: "bpy.types.Material") -> None:
-        # Blender 4.2+ (EEVEE Next) uses surface_render_method and supports
-        # DITHERED. Older versions use blend_method, where HASHED is the
-        # closest dithered transparency equivalent.
-        if hasattr(bl_mat, "surface_render_method"):
-            try:
-                bl_mat.surface_render_method = "DITHERED"
-                return
-            except (TypeError, ValueError):
-                bl_mat.surface_render_method = "BLENDED"
-                return
-
-        try:
-            bl_mat.blend_method = "HASHED"
-        except (TypeError, ValueError):
-            bl_mat.blend_method = "BLEND"
+    def build_material(mat) -> "bpy.types.Material":
+        """Build a standalone material with failure cleanup."""
+        with import_transaction():
+            return BlenderMaterialBuilder.build_material(mat)
 
     # -
     # Edge flags
@@ -452,6 +303,7 @@ class BlenderSceneBuilder:
 
         has_default_faces, mat_slot_map = self._material_slot_layout(indexed)
         mesh = bpy.data.meshes.new(prepared.name)
+        self._created_meshes.append(mesh)
         self._append_material_slots(mesh, has_default_faces, mat_slot_map)
         scaled_vertices = [
             (px * self.scale, py * self.scale, pz * self.scale) for px, py, pz in indexed.vertex_positions
@@ -462,11 +314,11 @@ class BlenderSceneBuilder:
         self._assign_face_materials(mesh, indexed, mat_slot_map)
         self._assign_uv_layer(mesh, indexed)
 
-        if self.triangulation_mode == "QUADS":
-            self._convert_mesh_to_quads(mesh)
-
         if self.smooth_edges:
             self._apply_edge_shading(mesh, indexed)
+
+        if self.triangulation_mode == "QUADS":
+            self._convert_mesh_to_quads(mesh)
 
         self._compact_material_slots(mesh)
         return mesh
@@ -621,10 +473,10 @@ class BlenderSceneBuilder:
             return
 
         for poly in mesh.polygons:
-            vertices = list(poly.vertices)
-            poly.use_smooth = any(
-                self._edge_key(v1, v2) in smooth_keys for v1, v2 in zip(vertices, vertices[1:] + vertices[:1])
-            )
+            # Generated triangles belong to the same smoothing fan as their
+            # source face. Sharp source boundaries, not triangle membership,
+            # isolate flat surfaces from adjacent curved ones.
+            poly.use_smooth = True
 
         smooth_keys.difference_update(boundary_sharp_keys)
         for edge in mesh.edges:
@@ -689,20 +541,14 @@ class BlenderSceneBuilder:
         smooth_keys: set[Tuple[int, int]] = set()
         boundary_sharp_keys: set[Tuple[int, int]] = set()
         for face, edge_ids in zip(indexed.faces, indexed.face_edge_ids, strict=True):
-            face_smooth_keys: set[Tuple[int, int]] = set()
-            face_non_smooth_source_keys: set[Tuple[int, int]] = set()
             for i, edge_id in enumerate(edge_ids):
                 if edge_id is None:
                     continue
                 edge_key = self._edge_key(face[i], face[(i + 1) % len(face)])
                 if source_edge_smooth.get(edge_id, False):
-                    face_smooth_keys.add(edge_key)
+                    smooth_keys.add(edge_key)
                 else:
-                    face_non_smooth_source_keys.add(edge_key)
-
-            if face_smooth_keys:
-                smooth_keys.update(face_smooth_keys)
-                boundary_sharp_keys.update(face_non_smooth_source_keys)
+                    boundary_sharp_keys.add(edge_key)
 
         smooth_keys.difference_update(boundary_sharp_keys)
         return smooth_keys, boundary_sharp_keys
@@ -727,7 +573,7 @@ class BlenderSceneBuilder:
                 bm,
                 faces=bm.faces[:],
                 cmp_seam=False,
-                cmp_sharp=False,
+                cmp_sharp=True,
                 cmp_uvs=True,
                 cmp_vcols=False,
                 cmp_materials=True,

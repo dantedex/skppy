@@ -57,8 +57,8 @@ class IMPORT_OT_skp(Operator, ImportHelper):
     )
 
     import_vray_materials: BoolProperty(
-        name="Use V-Ray Materials",
-        description="Prefer V-Ray PBR values when present; otherwise use SketchUp material appearance",
+        name="Use Render Materials",
+        description="Prefer V-Ray and Enscape PBR values when present; otherwise use SketchUp material appearance",
         default=False,
     )
 
@@ -219,7 +219,9 @@ class IMPORT_OT_skp(Operator, ImportHelper):
             return "model", model
         except skppy.InvalidSkpError as model_error:
             try:
-                material = skppy.load_material(filepath, import_vray_materials=import_vray_materials)
+                material = skppy.load_material(
+                    filepath, import_vray_materials=import_vray_materials, cancellation_check=cancellation_check
+                )
             except skppy.InvalidSkmError:
                 raise model_error
             return "material", material

@@ -55,6 +55,11 @@ were available for format validation.
 
 ## Corrupt or truncated files
 
+Geometry preparation raises `ValueError` with the source face ID and inner-loop
+index when an opening cannot be resolved. Such an opening is not silently
+removed: importing a solid face would change the model. Repair the references
+or re-save the source file before retrying.
+
 When an existing file cannot be decoded as SKP, `skppy.load()` raises
 `skppy.InvalidSkpError`. Its exception cause retains the low-level failure for
 diagnostics. This gives applications one stable error boundary for malformed

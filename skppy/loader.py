@@ -28,6 +28,8 @@ import zipfile
 from collections.abc import Callable
 
 from ._cancellation import cancellation_scope, check_cancelled
+from ._bounded_io import BoundedZipFile, InputLimitError, read_bounded
+from .load_limits import LoadLimits
 from .data_structure import SkpDocument
 from .data_structure.model import Model
 from .exceptions import InvalidSkpError, OldFormatError
@@ -44,6 +46,7 @@ def load(
     *,
     cancellation_check: Callable[[], bool] | None = None,
     import_vray_materials: bool = False,
+    limits: LoadLimits | None = None,
 ) -> Model:
     """
     Load a SketchUp .skp file and return a fully parsed Model.
@@ -63,6 +66,9 @@ def load(
     import_vray_materials : bool, optional
         Prefer V-Ray PBR attributes over SketchUp material appearance. The
         default is ``False`` so normal SketchUp materials remain authoritative.
+    limits : LoadLimits, optional
+        Configurable uncompressed input byte budgets. Defaults to 1 GiB per
+        resource and 4 GiB cumulative ZIP reads, with 8 MiB XML resources.
 
     Returns
     -------
@@ -138,17 +144,17 @@ def load(
     """
     path = os.fspath(filepath)
     with cancellation_scope(cancellation_check):
-        return _load(path, import_vray_materials=import_vray_materials)
+        return _load(path, import_vray_materials=import_vray_materials, limits=limits or LoadLimits())
 
 
-def _load(path: str, *, import_vray_materials: bool) -> Model:
+def _load(path: str, *, import_vray_materials: bool, limits: LoadLimits) -> Model:
     """Load one path inside an already installed cancellation scope."""
     try:
         with open(path, "rb") as fh:
             if not zipfile.is_zipfile(fh):
                 fh.seek(0)
                 logger.info("Starting to parse pre-ZIP CArchive file: %s", path)
-                data = fh.read()
+                data = read_bounded(fh, limits.max_entry_bytes, path)
                 check_cancelled()
                 return parse_legacy_bytes(data, import_vray_materials=import_vray_materials)
 
@@ -162,7 +168,7 @@ def _load(path: str, *, import_vray_materials: bool) -> Model:
                 # so the authoritative SketchUp header must win dispatch.
                 fh.seek(0)
                 logger.info("Starting to parse legacy CArchive with appended ZIP: %s", path)
-                data = fh.read()
+                data = read_bounded(fh, limits.max_entry_bytes, path)
                 check_cancelled()
                 return parse_legacy_bytes(data, import_vray_materials=import_vray_materials)
             logger.info(
@@ -183,7 +189,7 @@ def _load(path: str, *, import_vray_materials: bool) -> Model:
         if model_entry is None:
             raise ValueError("SKP ZIP container does not contain model.dat")
 
-        with zipfile.ZipFile(path, "r") as zf:
+        with BoundedZipFile(path, limits=limits) as zf:
             model_data = zf.read("model.dat")
             check_cancelled()
             return parse_model(
@@ -193,5 +199,5 @@ def _load(path: str, *, import_vray_materials: bool) -> Model:
                 document,
                 import_vray_materials=import_vray_materials,
             )
-    except (EOFError, KeyError, struct.error, ValueError, zipfile.BadZipFile) as exc:
+    except (EOFError, KeyError, struct.error, ValueError, zipfile.BadZipFile, InputLimitError) as exc:
         raise InvalidSkpError(f"Could not decode a valid SKP file: {path}") from exc

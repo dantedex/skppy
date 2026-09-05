@@ -75,10 +75,16 @@ def _apply_vray_values(material: Material, info: Mapping[str, str], encoded_plug
         return False
     params = _mapping(brdf.get("params"))
     user_data = _mapping(brdf.get("userData"))
-    material.metallic = _factor(_parameter_float(params, user_data, "metalness", material.metallic))
-    glossiness = _parameter_float(params, user_data, "reflect_glossiness", 1.0 - material.roughness)
-    use_roughness = _parameter_bool(params.get("option_use_roughness"))
-    material.roughness = _factor(glossiness if use_roughness else 1.0 - glossiness)
+    if material.metallic_texture is None or _is_scalar(params.get("metalness")):
+        material.metallic = _factor(_parameter_float(params, user_data, "metalness", material.metallic))
+    if material.roughness_texture is None or _is_scalar(params.get("reflect_glossiness")):
+        use_roughness = _parameter_bool(params.get("option_use_roughness"))
+        fallback = material.roughness if use_roughness else 1.0 - material.roughness
+        glossiness = _parameter_float(params, user_data, "reflect_glossiness", fallback)
+        material.roughness = _factor(glossiness if use_roughness else 1.0 - glossiness)
+    ior = _parameter_float(params, user_data, "fresnel_ior", material.ior)
+    if ior > 0.0:
+        material.ior = ior
     diffuse = _color(params.get("diffuse"))
     if diffuse is not None:
         material.color = diffuse
@@ -155,6 +161,13 @@ def _parameter_float(params: Mapping[str, Any], user_data: Mapping[str, Any], na
 
 def _parameter_bool(value: object) -> bool:
     return str(value).strip().lower() in {"1", "true", "yes"}
+
+
+def _is_scalar(value: object) -> bool:
+    try:
+        return math.isfinite(float(str(value)))
+    except (TypeError, ValueError):
+        return False
 
 
 def _factor(value: float) -> float:

@@ -94,7 +94,12 @@ class _MeshPreparer:
         if outer is None:
             return None
 
-        holes = [resolved for loop in face.inner_loops if (resolved := self._resolve_loop(loop)) is not None]
+        holes = []
+        for index, loop in enumerate(face.inner_loops):
+            resolved = self._resolve_loop(loop)
+            if resolved is None:
+                raise ValueError(f"Face {face.id}: invalid inner loop {index}; refusing to fill an unresolved opening")
+            holes.append(resolved)
         holes.extend(
             _LoopGeometry(positions, [None] * len(positions))
             for positions in self.opening_positions_by_face_id.get(face.id, [])
@@ -220,9 +225,19 @@ def _boundary_edge_lookup(loops: list[_LoopGeometry]) -> dict[tuple[int, int], i
 def _face_uvs(geometry: _FaceGeometry, positions: list[Position3D]) -> Optional[list[tuple[float, float]]]:
     """Compute projected or planar UVs only for textured appearances."""
     material = geometry.material
-    if material is None or not material.has_texture or material.texture is None:
+    if material is None:
         return None
-    texture = material.texture
+    textures = (
+        material.texture if material.has_texture else None,
+        material.metallic_texture,
+        material.roughness_texture,
+        material.normal_texture,
+        material.bump_texture,
+        material.displacement_texture,
+    )
+    texture = next((texture for texture in textures if texture is not None), None)
+    if texture is None:
+        return None
     if geometry.projection is not None:
         return geometry.projection.compute_uvs(
             positions,

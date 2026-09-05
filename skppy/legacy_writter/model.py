@@ -55,6 +55,8 @@ from ..data_structure.model_metadata import (
 from ..data_structure.primitives import Transform, Vector3D
 from ..data_structure.scene_data import PageBackgroundImage, Scene
 from ..writer.vray_materials import replace_vray_dictionaries
+from .._material_validation import validate_material_export, validate_material_names
+from .._atomic_io import atomic_write
 from .envelope import _rendering_options, build_legacy_2017_prefix
 from .extensions import extension_dictionary
 
@@ -1002,6 +1004,7 @@ class _LegacyModelEncoder(_LegacyGeometryEncoder):
         persistent_id: int | None = None,
         dictionaries: tuple[AttributeDictionary, ...] | list[AttributeDictionary] = (),
     ) -> None:
+        validate_material_export(material)
         self._write_entity(persistent_id=persistent_id, dictionaries=dictionaries)
         self.data += _encode_legacy_string(material.name)
         has_texture = material.texture is not None
@@ -1163,6 +1166,7 @@ class _LegacyModelEncoder(_LegacyGeometryEncoder):
 
 def build_legacy_2017_model(model: Model, *, export_vray_materials: bool = False) -> bytes:
     """Build a genuine SketchUp Make 2017 stream for root geometry."""
+    validate_material_names(model.materials)
     _validate_legacy_geometry(model)
     encoder = _LegacyModelEncoder(model, model.entities, export_vray_materials=export_vray_materials)
     root = encoder.encode()
@@ -1178,7 +1182,7 @@ def write_legacy_2017_model(
 ) -> Path:
     """Write a model as a pre-ZIP SketchUp Make 2017 file."""
     path = Path(filepath)
-    path.write_bytes(build_legacy_2017_model(model, export_vray_materials=export_vray_materials))
+    atomic_write(path, build_legacy_2017_model(model, export_vray_materials=export_vray_materials))
     return path
 
 

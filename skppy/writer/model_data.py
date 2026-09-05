@@ -7,6 +7,7 @@ from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 
+from .._atomic_io import atomic_write
 from ..data_structure.annotations import Dimension, Text
 from ..data_structure.entities import (
     ArcCurve,
@@ -444,7 +445,7 @@ def write_model(
     """Validate, serialize, and write a model to a modern SKP file."""
     path = Path(filepath)
     encoded = build_model_container(model, header=header, export_vray_materials=export_vray_materials)
-    path.write_bytes(encoded)
+    atomic_write(path, encoded)
     return path
 
 

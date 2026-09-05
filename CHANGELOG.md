@@ -5,7 +5,37 @@ the project uses semantic versioning while the public API remains pre-1.0.
 
 ## Unreleased
 
+### Added
+
+- Import opt-in Enscape PBR metadata from standalone SKM packages and modern
+  model materials, including metallic, roughness, specular, IOR, emission,
+  bump, normal, displacement, map brightness, and map inversion values.
+- Build Blender Principled material nodes for embedded metallic, roughness,
+  normal, bump, and displacement maps while preserving missing external map
+  references as material custom properties.
+
+### Changed
+
+- Broaden the Blender `Use V-Ray Materials` option to `Use Render Materials`;
+  the compatible `import_vray_materials` property now enables both V-Ray and
+  Enscape metadata.
+
 ### Fixed
+
+- Keep Blender imports isolated from existing materials and meshes; clean up
+  newly created data-blocks after failed builds.
+- Preserve hard source edges and smooth generated triangulation diagonals
+  consistently across face modes (GitHub #1).
+- Keep packed textures backed by persistent content-addressed files so standard
+  FBX and glTF exporters retain their image resources (GitHub #2).
+- Resolve renderer maps by path and material scope, reject ambiguous fallback
+  names, and generate UVs for materials without a base-color texture.
+- Preserve roughness when optional V-Ray values are absent, and reject invalid
+  inner loops instead of silently filling openings.
+- Reject duplicate material names and unsupported renderer export properties;
+  write completed models through atomic destination replacement.
+- Enforce configurable resource byte budgets before ZIP extraction and check
+  cancellation between read chunks, including standalone material imports.
 
 - Build versioned documentation for release tags without starting a duplicate
   GitHub Pages deployment that violates the main-only environment policy.

@@ -112,6 +112,15 @@ base-colour image is also connected through a V-Ray `TexBitmap`,
 `BitmapBuffer`, and `UVWGenChannel` graph. The bitmap uses the same embedded
 image basename and face UV channel as the native SketchUp texture.
 
+The export material subset is Base Color, Alpha, Metallic, Roughness, and the
+base-color image. Import support for renderer maps does not imply export
+support for those maps. The Python writer rejects unsupported public material
+properties rather than silently discarding them; it also rejects duplicate
+material names. V-Ray export does not broaden this subset.
+The Blender adapter reports omitted renderer maps, non-default IOR/specular,
+emission, and displacement as conversion warnings before returning its supported
+material subset. Review these warnings when exporting imported render materials.
+
 ## Tags, cameras, and text
 
 An object's `skppy_layer_name` string takes precedence over collection mapping.

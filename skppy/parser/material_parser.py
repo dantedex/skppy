@@ -69,6 +69,7 @@ import os
 import xml.etree.ElementTree as ET
 import zipfile
 from dataclasses import fields
+from functools import partial
 from typing import Dict, List, Mapping, Optional
 from xml.parsers import expat
 
@@ -76,6 +77,7 @@ from ..data_structure.images import Texture, normalize_texture_scale
 from ..data_structure.materials import Color, Material
 from ..data_structure.model_metadata import AttributeDictionary
 from .attributes import parse_entity_attribute_dictionaries
+from .enscape_materials import apply_enscape_xml
 from .tlv import (
     TlvTag,
     find_child,
@@ -91,7 +93,7 @@ _MAT_NS = "http://sketchup.google.com/schemas/sketchup/1.0/material"
 _MAX_MATERIAL_XML_BYTES = 8 * 1024 * 1024
 
 
-def _parse_bounded_xml(xml_bytes: bytes) -> ET.Element:
+def _parse_bounded_xml(xml_bytes: bytes, *, max_bytes: int = _MAX_MATERIAL_XML_BYTES) -> ET.Element:
     """Parse small XML without permitting DTD or entity declarations.
 
     Material metadata is untrusted file input. Expat supplies declaration
@@ -99,8 +101,8 @@ def _parse_bounded_xml(xml_bytes: bytes) -> ET.Element:
     used by the material decoder without relying on its permissive convenience
     parser.
     """
-    if len(xml_bytes) > _MAX_MATERIAL_XML_BYTES:
-        raise ValueError(f"Material XML exceeds the maximum supported size ({_MAX_MATERIAL_XML_BYTES} bytes)")
+    if len(xml_bytes) > max_bytes:
+        raise ValueError(f"Material XML exceeds the maximum supported size ({max_bytes} bytes)")
 
     builder = ET.TreeBuilder()
     parser = expat.ParserCreate(namespace_separator="}")
@@ -341,7 +343,9 @@ def _parse_material_xml(
         # malformed XML or a bad ZIP CRC preserves the complete TLV fallback.
         candidate = copy.deepcopy(target)
 
-    root = _parse_bounded_xml(xml_bytes)
+    xml_limit = getattr(getattr(zip_file, "limits", None), "max_xml_bytes", _MAX_MATERIAL_XML_BYTES)
+    parse_xml = partial(_parse_bounded_xml, max_bytes=xml_limit)
+    root = parse_xml(xml_bytes)
     ns = {"mat": _MAT_NS}
 
     mat_el = root.find("mat:material", ns)
@@ -380,6 +384,19 @@ def _parse_material_xml(
         )
     _apply_pbr_xml(candidate, mat_el, ns)
     if import_vray_materials:
+
+        def resolve_texture(filename: str, brightness: float, inverted: bool) -> Texture:
+            return _resolve_renderer_texture(
+                filename,
+                brightness,
+                inverted,
+                candidate,
+                zip_file,
+                zip_name_map or {},
+                image_directory=image_directory,
+            )
+
+        apply_enscape_xml(candidate, mat_el, parse_xml=parse_xml, resolve_texture=resolve_texture)
         apply_vray_xml(candidate, mat_el)
 
     if target is not None:
@@ -436,6 +453,48 @@ def _parse_texture_xml(
             logger.debug("Texture file not found in ZIP: %s", fallback_path)
     if texture.filename:
         texture.filename = os.path.basename(texture.filename.replace("\\", "/"))
+    return texture
+
+
+def _resolve_renderer_texture(
+    filename: str,
+    brightness: float,
+    inverted: bool,
+    material: Material,
+    zip_file: zipfile.ZipFile,
+    zip_name_map: Mapping[str, str],
+    *,
+    image_directory: str | None,
+) -> Texture:
+    """Resolve a renderer map only from safe entries inside the material archive."""
+    basename = os.path.basename(filename.replace("\\", "/"))
+    base_texture = material.texture
+    texture = Texture(
+        filename=basename,
+        x_scale=base_texture.x_scale if base_texture is not None else 1.0,
+        y_scale=base_texture.y_scale if base_texture is not None else 1.0,
+        brightness=brightness,
+        inverted=inverted,
+    )
+    corrected_names = {**{name: name for name in zip_file.namelist()}, **zip_name_map}
+    paths = [path for path in corrected_names if not path.endswith("/")]
+    directory = image_directory or f"materials/{material.name}"
+    declared = filename.replace("\\", "/")
+    candidates = [f"{directory.rstrip('/')}/{basename}"]
+    if not declared.startswith("/") and ":" not in declared and ".." not in declared.split("/"):
+        candidates.insert(0, declared.removeprefix("./"))
+    for candidate in candidates:
+        matches = [path for path in paths if path.casefold() == candidate.casefold()]
+        if candidate in matches:
+            matches = [candidate]
+        if len(matches) == 1:
+            texture.data = _zip_read(zip_file, matches[0], zip_name_map)
+            return texture
+    matches = [path for path in paths if os.path.basename(path).casefold() == basename.casefold()]
+    if len(matches) == 1:
+        texture.data = _zip_read(zip_file, matches[0], zip_name_map)
+    elif matches:
+        logger.warning("Ambiguous renderer texture %r for material %r: %s", basename, material.name, matches)
     return texture
 
 
