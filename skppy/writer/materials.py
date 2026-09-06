@@ -14,7 +14,6 @@ from ..data_structure.model_metadata import AttributeDictionary
 from ..parser.tlv import TlvTag
 from .attributes import encode_attribute_dictionaries
 from .tlv import encode_bool, encode_compact_int, encode_record, encode_records
-from .vray_materials import append_vray_xml
 
 _MATERIAL_NAMESPACE = "http://sketchup.google.com/schemas/sketchup/1.0/material"
 
@@ -74,17 +73,14 @@ def encode_material_record(
     )
 
 
-def material_entries(materials: Iterable[Material], *, export_vray_materials: bool = False) -> dict[str, bytes]:
+def material_entries(materials: Iterable[Material]) -> dict[str, bytes]:
     """Return deterministic ZIP entries containing material XML documents."""
     materials = list(materials)
     validate_material_names(materials)
     entries = {}
     for material in materials:
         _validate_material(material)
-        entries[f"materials/{material.name}/material.xml"] = encode_material_xml(
-            material,
-            export_vray_materials=export_vray_materials,
-        )
+        entries[f"materials/{material.name}/material.xml"] = encode_material_xml(material)
         if material.texture is not None:
             filename = _texture_filename(material)
             assert material.texture.data is not None
@@ -92,7 +88,7 @@ def material_entries(materials: Iterable[Material], *, export_vray_materials: bo
     return entries
 
 
-def encode_material_xml(material: Material, *, export_vray_materials: bool = False) -> bytes:
+def encode_material_xml(material: Material) -> bytes:
     """Encode one material appearance document using the public XML schema."""
     _validate_material(material)
     # SketchUp's material reader recognizes the canonical document shape: an
@@ -158,8 +154,6 @@ def encode_material_xml(material: Material, *, export_vray_materials: bool = Fal
     }
     for name, value in values.items():
         ET.SubElement(pbr, f"mat:{name}").text = value
-    if export_vray_materials:
-        append_vray_xml(material_element, material)
     ET.indent(document, space="  ")
     encoded: bytes = ET.tostring(document, encoding="utf-8", xml_declaration=True)
     return encoded

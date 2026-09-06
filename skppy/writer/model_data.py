@@ -428,10 +428,9 @@ def build_model_container(
     *,
     header: SkpHeader | None = None,
     extra_entries: Mapping[str, bytes] | None = None,
-    export_vray_materials: bool = False,
 ) -> bytes:
     """Build a modern SKP container from the currently supported model graph."""
-    entries = _model_entries(model, extra_entries, export_vray_materials=export_vray_materials)
+    entries = _model_entries(model, extra_entries)
     return build_modern_container(entries, header or default_modern_header())
 
 
@@ -440,11 +439,13 @@ def write_model(
     filepath: str | Path,
     *,
     header: SkpHeader | None = None,
-    export_vray_materials: bool = False,
 ) -> Path:
     """Validate, serialize, and write a model to a modern SKP file."""
     path = Path(filepath)
-    encoded = build_model_container(model, header=header, export_vray_materials=export_vray_materials)
+    encoded = build_model_container(
+        model,
+        header=header,
+    )
     atomic_write(path, encoded)
     return path
 
@@ -452,14 +453,12 @@ def write_model(
 def _model_entries(
     model: Model,
     extra_entries: Mapping[str, bytes] | None,
-    *,
-    export_vray_materials: bool,
 ) -> dict[str, bytes]:
     entries = dict(extra_entries or {})
     if "model.dat" in entries:
         raise ValueError("extra_entries cannot replace generated model.dat")
     entries["model.dat"] = encode_model_data(model)
-    for name, payload in material_entries(model.materials, export_vray_materials=export_vray_materials).items():
+    for name, payload in material_entries(model.materials).items():
         if name in entries:
             raise ValueError(f"extra_entries conflicts with generated entry: {name}")
         entries[name] = payload
