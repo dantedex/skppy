@@ -28,6 +28,7 @@ from .container import build_modern_container
 from .cameras import encode_cameras
 from .definitions import encode_definitions
 from .entities import PointReferenceIdResolver, encode_entities
+from .enscape_materials import prepare_enscape_export
 from .environments import encode_environment_data, environment_entries
 from .fonts import default_fonts, encode_fonts
 from .layers import (
@@ -429,9 +430,18 @@ def build_model_container(
     header: SkpHeader | None = None,
     extra_entries: Mapping[str, bytes] | None = None,
     export_vray_materials: bool = False,
+    export_enscape_materials: bool = False,
 ) -> bytes:
     """Build a modern SKP container from the currently supported model graph."""
-    entries = _model_entries(model, extra_entries, export_vray_materials=export_vray_materials)
+    material_data = None
+    if export_enscape_materials:
+        model, material_data = prepare_enscape_export(model, export_vray_materials=export_vray_materials)
+    entries = _model_entries(
+        model,
+        extra_entries,
+        export_vray_materials=export_vray_materials,
+        enscape_material_data=material_data,
+    )
     return build_modern_container(entries, header or default_modern_header())
 
 
@@ -441,10 +451,16 @@ def write_model(
     *,
     header: SkpHeader | None = None,
     export_vray_materials: bool = False,
+    export_enscape_materials: bool = False,
 ) -> Path:
     """Validate, serialize, and write a model to a modern SKP file."""
     path = Path(filepath)
-    encoded = build_model_container(model, header=header, export_vray_materials=export_vray_materials)
+    encoded = build_model_container(
+        model,
+        header=header,
+        export_vray_materials=export_vray_materials,
+        export_enscape_materials=export_enscape_materials,
+    )
     atomic_write(path, encoded)
     return path
 
@@ -454,12 +470,17 @@ def _model_entries(
     extra_entries: Mapping[str, bytes] | None,
     *,
     export_vray_materials: bool,
+    enscape_material_data: Mapping[int, str] | None = None,
 ) -> dict[str, bytes]:
     entries = dict(extra_entries or {})
     if "model.dat" in entries:
         raise ValueError("extra_entries cannot replace generated model.dat")
     entries["model.dat"] = encode_model_data(model)
-    for name, payload in material_entries(model.materials, export_vray_materials=export_vray_materials).items():
+    for name, payload in material_entries(
+        model.materials,
+        export_vray_materials=export_vray_materials,
+        enscape_material_data=enscape_material_data,
+    ).items():
         if name in entries:
             raise ValueError(f"extra_entries conflicts with generated entry: {name}")
         entries[name] = payload

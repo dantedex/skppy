@@ -402,6 +402,7 @@ class Model:
         header: Optional["SkpHeader"] = None,
         format: Literal["modern", "sketchup_2017"] = "modern",
         export_vray_materials: bool = False,
+        export_enscape_materials: bool = False,
     ) -> Path:
         """
         Write this model to a SketchUp .skp file.
@@ -416,6 +417,9 @@ class Model:
             Output container format.
         export_vray_materials : bool, optional
             Generate V-Ray material metadata from public material values.
+        export_enscape_materials : bool, optional
+            Generate experimental Enscape scalar and host diffuse metadata.
+            Mutually exclusive with V-Ray export; unsupported maps are rejected.
 
         Returns
         -------
@@ -430,6 +434,7 @@ class Model:
             header=header,
             format=format,
             export_vray_materials=export_vray_materials,
+            export_enscape_materials=export_enscape_materials,
         )
 
     def dump_zip(self, output_dir: str) -> Path:

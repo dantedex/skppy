@@ -7,6 +7,10 @@ the project uses semantic versioning while the public API remains pre-1.0.
 
 ### Added
 
+- Add experimental opt-in Python Enscape export for scalar material settings,
+  glass, emission and embedded host diffuse textures in modern and 2017 SKP.
+  Reject unsupported maps/combinations without changing the destination or
+  caller-owned materials; validate metadata and images through the public SDK.
 - Import opt-in Enscape PBR metadata from standalone SKM packages and modern
   model materials, including metallic, roughness, specular, IOR, emission,
   bump, normal, displacement, map brightness, and map inversion values.

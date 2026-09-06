@@ -243,6 +243,9 @@ model.save("output-2017.skp", format="sketchup_2017")
 
 # Add V-Ray PBR metadata while retaining the normal SketchUp material:
 model.save("output-vray.skp", export_vray_materials=True)
+
+# Experimental Enscape scalar and host diffuse-texture metadata:
+model.save("output-enscape.skp", export_enscape_materials=True)
 ```
 
 `export_vray_materials` defaults to `False`. When enabled, it maps material
@@ -250,6 +253,11 @@ colour, opacity, metallic, and roughness into a V-Ray material graph for either
 output format. Native SketchUp appearance and PBR fields remain present as a
 fallback. Embedded base-colour images are connected to a V-Ray bitmap graph
 using UV channel 1 while remaining available as native SketchUp textures.
+
+`export_enscape_materials` is also off by default and mutually exclusive with
+V-Ray export. It supports scalar material settings and embedded base images,
+but rejects auxiliary maps and unverified shader combinations. See
+{ref}`enscape-export-coverage` before using this experimental option.
 
 The 2017 writer preserves polygon and edge geometry, face holes, edge flags,
 reusable component definitions, and transformed component placements in the

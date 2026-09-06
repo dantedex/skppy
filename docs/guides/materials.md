@@ -92,7 +92,8 @@ without modifying other maps. Invalid dimensions retain the SketchUp mapping
 and emit a warning. Normal-image brightness/inversion is applied before normal
 decoding, not to the resulting vector. Negative bump amounts use Blender's
 Bump inversion; negative displacement amounts retain their signed scale.
-Enscape export is not implemented.
+Experimental Python export covers scalars and the embedded diffuse texture;
+see {ref}`enscape-export-coverage` for its separate limitations.
 
 Explicit opacity masks use `Material.opacity_texture`, with independent size,
 brightness and inversion. Missing mask images retain the existing opacity or
@@ -135,6 +136,33 @@ declared safe ZIP path takes precedence over the current material's folder and
 an unambiguous basename match. Ambiguous images are not guessed.
 
 ---
+
+(enscape-export-coverage)=
+## Experimental Enscape export
+
+Use `skppy.save(model, "output.skp", export_enscape_materials=True)` or
+`model.save(...)` to generate `Enscape.Material` metadata. Both modern SKP and
+`format="sketchup_2017"` are supported. The option is off by default and cannot
+be combined with `export_vray_materials=True`. Blender's export operator does
+not expose this option yet.
+
+The writer preserves scalar color, opacity, metallic, roughness, specular, IOR,
+tint, image fade, emission, and glass transmission. It embeds the base image
+as an ordinary SketchUp texture and references it with `Source=SKETCHUP`,
+retaining brightness/inversion in Enscape metadata without altering its pixels.
+Native SketchUp appearance remains as a fallback; it cannot reproduce all
+renderer adjustments. Caller-owned materials and dictionaries are not mutated.
+
+Generic/glass materials use the observed version-5 layout. Emissive materials
+use the observed version-4 `SELF_ILLUMINATED` layout. These are metadata exports,
+not a guarantee of identical rendering: independent SketchUp SDK tests check
+readability, metadata values and embedded image decoding, not Enscape output.
+
+Unsupported auxiliary maps, per-image UV multipliers, simultaneous glass and
+emission, and independent alpha plus transmission raise `ValueError` before
+replacing the destination. Tint/emission colors must have opaque alpha. Relief
+scalar settings can be retained, but active relief maps cannot yet be exported.
+Layer display materials continue to use the native writer's restrictions.
 
 ## Accessing texture data
 
