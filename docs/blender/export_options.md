@@ -90,7 +90,7 @@ legacy output support.
 
 ## Materials and textures
 
-The exporter reads the Principled BSDF when available and falls back to the
+By default, the exporter reads the Principled BSDF when available and falls back to the
 material's viewport diffuse state. Linked Image Texture nodes are followed
 through intermediate nodes. Packed images and existing image files are embedded
 in the SKP; generated or procedural images without bytes produce a warning and
@@ -98,6 +98,42 @@ leave the material untextured.
 
 Optional material custom properties `skppy_x_scale` and `skppy_y_scale` set the
 physical texture tile size in SketchUp inches. Both default to `1.0`.
+
+### Enscape Materials (Experimental)
+
+This opt-in setting writes Enscape metadata in both modern and 2017 SKP files.
+It cannot be enabled together with **V-Ray Materials**. Disable **Materials
+and PBR** to disable both renderer options.
+
+The Enscape adapter follows the active Material Output's direct Principled
+surface connection, including renamed shaders. It copies base color, alpha,
+metallic, roughness, specular IOR level, IOR, transmission, emission color and
+emission strength. Materials without nodes use their viewport appearance
+(Blender 4.5); Blender 5.2's node-based materials use their active shader.
+Colors are converted from Blender's linear values to serialized sRGB bytes.
+
+A direct base-color Image Texture is supported with a static sRGB image,
+flat/repeating mapping, linear interpolation and the active UV coordinates.
+Image alpha may connect directly to Principled Alpha, or through multiplication
+by a constant opacity. Transparent image pixels require that alpha connection.
+Packed or file-backed bytes are embedded when **Embedded Textures** is enabled;
+unavailable bytes cause an error in this mode.
+
+This option is stricter than the default exporter: unsupported base-color
+graphs (including imported tint/brightness/fade graphs), auxiliary maps, UV
+transforms, linked scalar inputs, alternate surface shaders, volume and
+displacement graphs cause an error before replacing the destination. Coat,
+sheen, subsurface, anisotropy, thin film, thin-wall settings and diffuse
+roughness are not translated. RGB values outside `[0, 1]` are rejected; use
+emission strength for high intensity. Glass plus emission, or independent
+alpha plus transmission, are also rejected by the writer.
+
+Independent tests exercise Blender 4.5/5.2 and check the resulting files through
+the SketchUp SDK. This proves file and metadata readability, not Enscape
+rendering parity. See {ref}`enscape-export-coverage` for the Python writer's
+separate supported subset.
+
+### V-Ray Materials
 
 When **V-Ray Materials** is enabled, the exporter adds a deterministic
 `MtlSingleBRDF` -> `BRDFVRayMtl` graph to every exported material. Base colour

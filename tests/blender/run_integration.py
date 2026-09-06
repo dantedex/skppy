@@ -22,6 +22,7 @@ from material_isolation import run as run_material_isolation
 from edge_shading import run as run_edge_shading
 from texture_interchange import run as run_texture_interchange
 from enscape_materials import run as run_enscape_materials
+from enscape_export import run as run_enscape_export
 
 
 def _arguments() -> argparse.Namespace:
@@ -941,6 +942,7 @@ def main() -> None:
     _run_cameras_and_scenes(module_name)
     _clear_scene()
     _run_export(module_name, args.export_output)
+    run_enscape_export(module_name, _png_rgba(255), args.export_output)
     _run_automatic_dispatch(module_name)
     if args.fixture is not None:
         _run_fixture(args.fixture)

@@ -15,6 +15,7 @@ import numpy as np
 from mathutils import Matrix, Vector
 
 from . import skppy
+from .enscape_export import populate_material as populate_enscape_material
 from .skppy.coplanar import CoplanarRegion, PolygonBoundary, merge_coplanar_polygons
 
 _GEOMETRY_TYPES = {"MESH", "CURVE", "SURFACE", "META"}
@@ -35,6 +36,7 @@ class BlenderModelBuilder:
         inches_per_unit: float = 39.37007874015748,
         apply_modifiers: bool = True,
         export_materials: bool = True,
+        export_enscape_materials: bool = False,
         export_textures: bool = True,
         export_uvs: bool = True,
         export_layers: bool = True,
@@ -48,6 +50,7 @@ class BlenderModelBuilder:
         self.inches_per_unit = inches_per_unit
         self.apply_modifiers = apply_modifiers
         self.export_materials = export_materials
+        self.export_enscape_materials = export_enscape_materials
         self.export_textures = export_textures
         self.export_uvs = export_uvs
         self.export_layers = export_layers
@@ -133,15 +136,19 @@ class BlenderModelBuilder:
         if key in self._material_map:
             return self._material_map[key]
 
-        base_color, metallic, roughness, alpha, image = self._material_state(material)
         name = self._unique_name(material.name or "Material", self._material_names)
-        skp_material = self.model.add_material(
-            name,
-            color=skppy.Color(*(self._channel(value) for value in base_color[:3])),
-            alpha=min(max(float(alpha), 0.0), 1.0),
-            metallic=min(max(float(metallic), 0.0), 1.0),
-            roughness=min(max(float(roughness), 0.0), 1.0),
-        )
+        skp_material = self.model.add_material(name)
+        if self.export_enscape_materials:
+            try:
+                image = populate_enscape_material(material, skp_material, self._channel)
+            except ValueError as exc:
+                raise ValueError(f"Material {material.name!r}: {exc}") from exc
+        else:
+            base_color, metallic, roughness, alpha, image = self._material_state(material)
+            skp_material.color = skppy.Color(*(self._channel(value) for value in base_color[:3]))
+            skp_material.alpha = min(max(float(alpha), 0.0), 1.0)
+            skp_material.metallic = min(max(float(metallic), 0.0), 1.0)
+            skp_material.roughness = min(max(float(roughness), 0.0), 1.0)
         if self.export_textures and image is not None:
             image_data = self._image_bytes(image)
             if image_data is not None:
@@ -154,6 +161,8 @@ class BlenderModelBuilder:
                     data=image_data,
                 )
             else:
+                if self.export_enscape_materials:
+                    raise ValueError(f"Material {material.name!r}: linked image bytes are unavailable")
                 self.warnings.append(f"Material {material.name!r}: linked image bytes are unavailable")
         self._material_map[key] = skp_material
         return skp_material

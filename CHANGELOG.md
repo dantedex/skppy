@@ -7,6 +7,9 @@ the project uses semantic versioning while the public API remains pre-1.0.
 
 ### Added
 
+- Expose experimental Enscape export in Blender for supported active Principled
+  scalars and embedded base images. Preserve IOR, specular, transmission and
+  emission; reject unsupported shader state before replacing output files.
 - Add experimental opt-in Python Enscape export for scalar material settings,
   glass, emission and embedded host diffuse textures in modern and 2017 SKP.
   Reject unsupported maps/combinations without changing the destination or

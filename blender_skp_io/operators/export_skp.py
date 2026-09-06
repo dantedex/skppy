@@ -70,6 +70,11 @@ class EXPORT_OT_skp(Operator, ExportHelper):
         description="Embed packed or file-backed images linked to Base Color",
         default=True,
     )
+    export_enscape_materials: BoolProperty(
+        name="Enscape Materials (Experimental)",
+        description="Export supported Principled scalars and base images; reject unsupported graphs; excludes V-Ray",
+        default=False,
+    )
     export_uvs: BoolProperty(
         name="UV Coordinates",
         description="Convert active Blender UV maps into SKP face projections",
@@ -116,6 +121,7 @@ class EXPORT_OT_skp(Operator, ExportHelper):
         column = appearance.column()
         column.enabled = self.export_materials
         column.prop(self, "export_vray_materials")
+        column.prop(self, "export_enscape_materials")
         column.prop(self, "export_textures")
         column.prop(self, "export_uvs")
 
@@ -130,12 +136,15 @@ class EXPORT_OT_skp(Operator, ExportHelper):
         from ..export_builder import BlenderModelBuilder
 
         try:
+            if self.export_materials and self.export_enscape_materials and self.export_vray_materials:
+                raise ValueError("Choose either Enscape or V-Ray material export, not both")
             builder = BlenderModelBuilder(
                 context,
                 export_scope=self.export_scope,
                 inches_per_unit=self.inches_per_unit,
                 apply_modifiers=self.apply_modifiers,
                 export_materials=self.export_materials,
+                export_enscape_materials=self.export_materials and self.export_enscape_materials,
                 export_textures=self.export_textures,
                 export_uvs=self.export_uvs,
                 export_layers=self.export_layers,
@@ -149,6 +158,7 @@ class EXPORT_OT_skp(Operator, ExportHelper):
                 self.filepath,
                 format=self.output_format,
                 export_vray_materials=self.export_materials and self.export_vray_materials,
+                export_enscape_materials=self.export_materials and self.export_enscape_materials,
             )
         except Exception as exc:
             self.report({"ERROR"}, f"Failed to export .skp file: {exc}")

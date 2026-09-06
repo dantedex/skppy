@@ -143,8 +143,9 @@ an unambiguous basename match. Ambiguous images are not guessed.
 Use `skppy.save(model, "output.skp", export_enscape_materials=True)` or
 `model.save(...)` to generate `Enscape.Material` metadata. Both modern SKP and
 `format="sketchup_2017"` are supported. The option is off by default and cannot
-be combined with `export_vray_materials=True`. Blender's export operator does
-not expose this option yet.
+be combined with `export_vray_materials=True`. Blender exposes the supported
+Principled subset through **Enscape Materials (Experimental)**; see
+[Blender export options](../blender/export_options.md).
 
 The writer preserves scalar color, opacity, metallic, roughness, specular, IOR,
 tint, image fade, emission, and glass transmission. It embeds the base image
