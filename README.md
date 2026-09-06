@@ -25,10 +25,14 @@ scalar custom properties.
 ## Documentation
 
 The complete documentation is published at
-[dantedex.github.io/skppy](https://dantedex.github.io/skppy/). Use
+[dantedex.github.io/skppy](https://dantedex.github.io/skppy/). Start with
+[stable](https://dantedex.github.io/skppy/stable/) for the newest release, use
 [latest](https://dantedex.github.io/skppy/latest/) for the current development
 documentation or select a stable release such as
-[0.10.0](https://dantedex.github.io/skppy/0.10.0/) from the version menu.
+[0.10.0](https://dantedex.github.io/skppy/0.10.0/) from the expandable version menu
+at the bottom of the navigation sidebar. Switching versions keeps the same
+page when available, otherwise it opens that version's home page. Older
+releases show a notice linking to stable documentation.
 
 Documentation sources live in [`docs/`](docs/). Build the current sources with
 `make docs`, or build all documented releases and `main` with

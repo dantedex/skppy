@@ -15,17 +15,18 @@ import sys
 import tarfile
 import tempfile
 
+from sphinx.ext.autosummary.generate import find_autosummary_in_files
 
 TAG_PATTERN = re.compile(r"^v(?P<version>\d+\.\d+\.\d+)$")
 ROOT_REDIRECT = """<!doctype html>
 <html lang="en">
   <head>
     <meta charset="utf-8">
-    <meta http-equiv="refresh" content="0; url=./latest/">
-    <link rel="canonical" href="./latest/">
+    <meta http-equiv="refresh" content="0; url=./{default_path}/">
+    <link rel="canonical" href="./{default_path}/">
     <title>skppy documentation</title>
   </head>
-  <body><p>Continue to the <a href="./latest/">latest skppy documentation</a>.</p></body>
+  <body><p>Continue to the <a href="./{default_path}/">skppy documentation</a>.</p></body>
 </html>
 """
 
@@ -43,7 +44,7 @@ def _run_git(repo_root: Path, *args: str) -> str:
 
 
 def _document_names(source_directory: Path) -> list[str]:
-    """Return Sphinx document names available in a source tree."""
+    """Include source pages and explicitly listed autosummary API pages."""
     documents = []
     for suffix in ("*.rst", "*.md"):
         for source in source_directory.rglob(suffix):
@@ -51,6 +52,11 @@ def _document_names(source_directory: Path) -> list[str]:
             if "_build" in relative.parts or relative.name == "README.md":
                 continue
             documents.append(relative.with_suffix("").as_posix())
+            if suffix == "*.rst" and ".. autosummary::" in source.read_text(encoding="utf-8"):
+                for entry in find_autosummary_in_files([source]):
+                    if entry.path is not None:
+                        generated = Path(entry.path) / entry.name
+                        documents.append(generated.relative_to(source_directory).as_posix())
     return sorted(set(documents))
 
 
@@ -69,7 +75,7 @@ def _tag_documents(repo_root: Path, tag: str) -> list[str]:
 
 
 def discover_versions(repo_root: Path) -> list[dict[str, object]]:
-    """Describe the development docs and all semantic release tags."""
+    """Describe stable, development, and numerically ordered release documentation."""
     versions: list[dict[str, object]] = [
         {
             "label": "latest",
@@ -95,6 +101,9 @@ def discover_versions(repo_root: Path) -> list[dict[str, object]]:
                 "documents": _tag_documents(repo_root, tag),
             }
         )
+    if tags:
+        stable = {**versions[1], "label": "stable", "path": "stable", "version": versions[1]["label"]}
+        versions.insert(0, stable)
     return versions
 
 
@@ -139,7 +148,7 @@ def build_versioned_docs(repo_root: Path, output_directory: Path) -> None:
             else:
                 source_root = temporary_root / public_path
                 _extract_source(repo_root, str(item["ref"]), source_root)
-                release = public_path
+                release = str(item.get("version", public_path))
                 _write_version_module(source_root, release)
 
             environment = os.environ.copy()
@@ -171,7 +180,8 @@ def build_versioned_docs(repo_root: Path, output_directory: Path) -> None:
             )
 
     (output_directory / ".nojekyll").touch()
-    (output_directory / "index.html").write_text(ROOT_REDIRECT, encoding="utf-8")
+    default_path = "stable" if any(item["path"] == "stable" for item in versions) else "latest"
+    (output_directory / "index.html").write_text(ROOT_REDIRECT.format(default_path=default_path), encoding="utf-8")
 
 
 def main() -> None:

@@ -1,11 +1,32 @@
 {# SPDX-License-Identifier: MIT #}
 {% if documentation_versions %}
-<div class="version-switcher">
-  <label for="documentation-version">Documentation version</label>
-  <select id="documentation-version" onchange="if (this.value) window.location.href = this.value;">
-    {%- for item in documentation_versions %}
-      <option value="{{ item.url }}"{% if item.current %} selected{% endif %}>{{ item.label }}</option>
-    {%- endfor %}
-  </select>
-</div>
+<details class="version-switcher">
+  <summary aria-controls="documentation-versions">
+    <span>Version <strong>{{ documentation_current.label }}</strong></span>
+    <span class="version-chevron" aria-hidden="true">⌃</span>
+  </summary>
+  <nav id="documentation-versions" class="version-panel" aria-label="Documentation versions">
+    <p class="version-heading">Documentation versions</p>
+    {% for group, heading in [("channels", "Channels"), ("releases", "Releases")] %}
+    <p class="version-group">{{ heading }}</p>
+    <ul>
+      {% for item in documentation_versions %}
+      {% if (item.path in ["stable", "latest"]) == (group == "channels") %}
+      <li>
+        <a href="{{ item.url }}"{% if item.current %} aria-current="page"{% endif %}
+           {% if item.same_page %}data-version-same-page{% endif %}>
+          <span>{{ item.label }}</span>
+          {% if item.path == "stable" %}<small>{{ item.version }}</small>
+          {% elif item.path == "latest" %}<small>Development</small>
+          {% elif documentation_stable and item.label == documentation_stable.version %}<small>Latest release</small>
+          {% endif %}
+          {% if item.current %}<span aria-label="Current version">✓</span>{% endif %}
+        </a>
+      </li>
+      {% endif %}
+      {% endfor %}
+    </ul>
+    {% endfor %}
+  </nav>
+</details>
 {% endif %}

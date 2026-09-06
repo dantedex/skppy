@@ -93,15 +93,16 @@ exclude_patterns = [
 html_theme = "furo"
 html_static_path = ["_static"]
 html_css_files = ["versioning.css"]
+html_js_files = ["versioning.js"]
 html_title = "skppy"
 html_sidebars = {
     "**": [
         "sidebar/brand.html",
-        "versioning.jinja",
         "sidebar/search.html",
         "sidebar/scroll-start.html",
         "sidebar/navigation.html",
         "sidebar/scroll-end.html",
+        "versioning.jinja",
         "sidebar/variant-selector.html",
     ],
 }
@@ -122,6 +123,15 @@ def _add_version_context(app, pagename, templatename, context, doctree):
         target = posixpath.join(item["path"], f"{target_page}.html")
         item["url"] = posixpath.relpath(target, current_directory)
         item["current"] = item["path"] == current_path
+        item["same_page"] = target_page == pagename
+    stable = next((item for item in versions if item["path"] == "stable"), None)
+    context["documentation_current"] = next(item for item in versions if item["current"])
+    context["documentation_stable"] = stable
+    context["documentation_outdated"] = stable is not None and current_path not in {
+        "latest",
+        "stable",
+        stable["version"],
+    }
     context["documentation_versions"] = versions
 
 

@@ -5,6 +5,13 @@ the project uses semantic versioning while the public API remains pre-1.0.
 
 ## Unreleased
 
+### Documentation
+
+- Add an accessible, expandable version menu with stable/development channels,
+  numbered releases, and notices on older documentation. Publish `/stable/`
+  from the newest release tag and make it the default documentation entry.
+  Existing version URLs and manual GitHub Pages deployment remain supported.
+
 ### Added
 
 - Import opt-in Enscape PBR metadata from standalone SKM packages and modern

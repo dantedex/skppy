@@ -1,0 +1,14 @@
+{# SPDX-License-Identifier: MIT #}
+{% extends "!page.html" %}
+{% block content %}
+{% if documentation_outdated %}
+<aside class="version-notice" aria-label="Older documentation version">
+  You are reading version {{ documentation_current.label }}.
+  <a href="{{ documentation_stable.url }}"
+     {% if documentation_stable.same_page %}data-version-same-page{% endif %}>
+    Switch to stable ({{ documentation_stable.version }}).
+  </a>
+</aside>
+{% endif %}
+{{ super() }}
+{% endblock %}

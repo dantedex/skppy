@@ -61,6 +61,7 @@ build/
 # Cython generated files (keep sources, ignore compiled output)
 *.so
 *.html
+!docs/_templates/*.html
 
 # IDE / editor
 .vscode/

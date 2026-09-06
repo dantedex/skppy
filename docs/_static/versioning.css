@@ -1,23 +1,73 @@
 /* SPDX-License-Identifier: MIT */
 
 .version-switcher {
-  border-bottom: 1px solid var(--color-sidebar-item-background--hover);
-  margin: 0.75rem 0;
-  padding: 0 1rem 1rem;
+  position: relative;
+  flex-shrink: 0;
+  margin: 0.5rem 1rem;
+  font-size: 0.875rem;
 }
 
-.version-switcher label {
-  display: block;
-  font-size: 0.8rem;
-  font-weight: 600;
-  margin-bottom: 0.35rem;
-}
-
-.version-switcher select {
-  background: var(--color-background-primary);
+.version-switcher summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.7rem 0.85rem;
   border: 1px solid var(--color-foreground-border);
+  border-radius: 0.5rem;
+  background: var(--color-background-primary);
+  color: var(--color-foreground-primary);
+  cursor: pointer;
+  list-style: none;
+}
+
+.version-switcher summary::-webkit-details-marker { display: none; }
+.version-switcher[open] .version-chevron { transform: rotate(180deg); }
+
+.version-panel {
+  position: absolute;
+  bottom: calc(100% + 0.5rem);
+  inset-inline: 0;
+  z-index: 20;
+  max-height: min(60vh, 28rem);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 0.75rem;
+  border: 1px solid var(--color-foreground-border);
+  border-radius: 0.5rem;
+  background: var(--color-background-primary);
+  color: var(--color-foreground-primary);
+  box-shadow: 0 0.5rem 2rem rgb(0 0 0 / 20%);
+}
+
+.version-panel .version-heading { margin: 0 0 1rem; font-weight: 700; }
+.version-panel .version-group { margin: 0.7rem 0 0.3rem; color: var(--color-foreground-secondary); }
+.version-panel ul { margin: 0; padding: 0; list-style: none; }
+.version-panel li { margin: 0; }
+
+.version-panel a {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.65rem 0.5rem;
   border-radius: 0.25rem;
   color: var(--color-foreground-primary);
-  padding: 0.35rem;
-  width: 100%;
+  text-decoration: none;
+}
+
+.version-panel small { margin-inline-start: auto; color: var(--color-foreground-secondary); }
+.version-panel a:hover, .version-panel a[aria-current] { background: var(--color-sidebar-item-background--hover); }
+.version-panel a[aria-current] { font-weight: 700; }
+.version-switcher :focus-visible { outline: 2px solid var(--color-brand-primary); outline-offset: 2px; }
+
+.version-notice {
+  margin-bottom: 1.5rem;
+  padding: 0.8rem 1rem;
+  border-inline-start: 3px solid var(--color-brand-primary);
+  border-radius: 0.25rem;
+  background: var(--color-background-secondary);
+  font-size: 0.9rem;
+}
+
+@media print {
+  .version-switcher { display: none; }
 }
