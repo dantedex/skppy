@@ -11,6 +11,10 @@ from skppy.writer.materials import material_entries
 @pytest.mark.parametrize(
     ("field", "value"),
     [
+        ("tint_color", skppy.Color(128, 128, 128)),
+        ("texture_fade", 0.25),
+        ("transmission", 0.75),
+        ("opacity_texture", skppy.Texture(filename="mask.png", data=b"pixels")),
         ("ior", 2.2),
         ("specular", 0.1),
         ("emission_color", skppy.Color(1, 2, 3)),
@@ -39,7 +43,7 @@ def test_save_rejects_unsupported_renderer_properties(format, field, value, tmp_
     destination.write_bytes(b"previous model")
 
     with pytest.raises(ValueError, match=f"unsupported export properties: {field}"):
-        model.save(destination, format=format, export_vray_materials=True)
+        model.save(destination, format=format)
 
     assert destination.read_bytes() == b"previous model"
 
@@ -61,7 +65,7 @@ def test_material_resources_reject_duplicate_names_and_reserved_image_name() -> 
         material_entries([material])
 
 
-@pytest.mark.parametrize(("field", "value"), [("brightness", 0.5), ("inverted", True)])
+@pytest.mark.parametrize(("field", "value"), [("brightness", 0.5), ("inverted", True), ("uv_scale", (2.0, 3.0))])
 def test_export_rejects_unrepresented_base_image_adjustments(field, value) -> None:
     material = skppy.Material(name="Adjusted", has_texture=True, texture=skppy.Texture(filename="a.png", data=b"x"))
     setattr(material.texture, field, value)

@@ -50,13 +50,15 @@ def _material_package(
         archive.writestr("ref/texture_1.jpg", b"jpeg texture")
 
 
-def _enscape_material_package(path: Path, *, relief_type: str = "NORMAL") -> None:
+def _enscape_material_package(path: Path, *, relief_type: str = "NORMAL", bump_amount: float = 0.64) -> None:
     metadata = f"""<?xml version="1.0" encoding="utf-8"?>
 <SketchupMaterial Version="4">
+  <DiffuseColor>#405060</DiffuseColor><Opacity>0.6</Opacity>
+  <TintColor>#B2B2B2</TintColor><ImageFade>0.845</ImageFade>
   <Roughness>0.72</Roughness><Metallic>0.31</Metallic><Specular>0.42</Specular>
   <IndexOfRefraction>1.61</IndexOfRefraction>
   <EmissiveColor>#102030</EmissiveColor><EmissiveStrength>2.5</EmissiveStrength>
-  <BumpAmount>0.64</BumpAmount><NormalMapIntensity>0.83</NormalMapIntensity>
+  <BumpAmount>{bump_amount}</BumpAmount><NormalMapIntensity>0.83</NormalMapIntensity>
   <BumpMapType>{relief_type}</BumpMapType>
   <BumpTexture><Filepath>C:\\maps\\normal.png</Filepath><Brightness>0.8</Brightness><IsInverted>true</IsInverted></BumpTexture>
   <RoughnessTexture>
@@ -113,6 +115,12 @@ def test_loads_opt_in_enscape_pbr_values_and_embedded_maps(tmp_path: Path) -> No
     assert (material.metallic, material.roughness, material.specular, material.ior) == pytest.approx(
         (0.31, 0.72, 0.42, 1.61)
     )
+    assert material.color == skppy.Color(64, 80, 96)
+    assert material.tint_color == skppy.Color(178, 178, 178)
+    assert material.texture_fade == pytest.approx(0.845)
+    assert sketchup.tint_color == skppy.Color(255, 255, 255)
+    assert sketchup.texture_fade == 1
+    assert material.alpha == pytest.approx(0.6)
     assert material.emission_color == skppy.Color(16, 32, 48)
     assert material.emission_strength == pytest.approx(2.5)
     assert material.bump_map_type == "NORMAL"
@@ -140,6 +148,18 @@ def test_maps_enscape_displacement_to_its_own_texture_slot(tmp_path: Path) -> No
     assert material.displacement_texture is not None
     assert material.displacement_texture.filename == "normal.png"
     assert material.normal_texture is None
+
+
+@pytest.mark.parametrize("relief", ["BUMP", "DISPLACEMENT"])
+def test_negative_enscape_height_amounts_retain_relief_direction(tmp_path, relief) -> None:
+    path = tmp_path / "negative.skm"
+    _enscape_material_package(path, relief_type=relief, bump_amount=-0.75)
+
+    material = skppy.load_material(path, import_vray_materials=True)
+
+    assert material.bump_strength == pytest.approx(-0.75)
+    if relief == "DISPLACEMENT":
+        assert material.displacement_scale == pytest.approx(-0.75)
 
 
 def test_accepts_explicit_ref_texture_path(tmp_path: Path) -> None:
