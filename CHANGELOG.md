@@ -23,6 +23,9 @@ the project uses semantic versioning while the public API remains pre-1.0.
 
 ### Changed
 
+- Preserve positive per-image UV multipliers in Python Enscape exports through
+  explicit physical texture dimensions, without changing the shared mesh UV
+  basis. Reject invalid, overflowing or mirrored explicit dimensions.
 - Export supported Blender diffuse tint, image-fade, brightness and inversion
   graphs to Enscape metadata without changing image pixels or alpha. Recognize
   validated operations and links independently of node labels.

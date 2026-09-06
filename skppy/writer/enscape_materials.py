@@ -9,6 +9,7 @@ import math
 import xml.etree.ElementTree as ET
 
 from ..data_structure.materials import Color, Material
+from ..data_structure.images import Texture
 from ..data_structure.model import Model
 from ..data_structure.model_metadata import AttributeDictionary, AttributeDictionaryEntry
 
@@ -28,8 +29,8 @@ _RESET_FIELDS = (
 def enscape_material_xml(material: Material) -> str:
     """Encode observed scalar layouts and a host-derived diffuse texture.
 
-    Auxiliary maps, independent coverage plus transmission, and shader UV
-    transforms are rejected until their export resource contract is verified.
+    Auxiliary maps, independent coverage plus transmission, and mirrored
+    per-image transforms are rejected until their export contract is verified.
     """
     _validate(material)
     # Compatibility samples establish self illumination in v4, and glass in v5.
@@ -59,20 +60,38 @@ def enscape_material_xml(material: Material) -> str:
         ET.SubElement(root, key).text = value
     if material.texture is not None:
         texture = material.texture
+        width, height, explicit = _texture_dimensions(texture)
         element = ET.SubElement(root, "DiffuseTexture")
         texture_values = {
             "Source": "SKETCHUP",
             "Filepath": texture.filename.replace("\\", "/").split("/")[-1],
             "Brightness": _number(texture.brightness),
             "IsInverted": str(texture.inverted).lower(),
-            "UseExplicitTransformation": "false",
-            "Width": _number(abs(texture.x_scale) * 0.0254),
-            "Height": _number(abs(texture.y_scale) * 0.0254),
+            "UseExplicitTransformation": str(explicit).lower(),
+            "Width": _number(width),
+            "Height": _number(height),
             "Rotation": "0",
         }
         for key, value in texture_values.items():
             ET.SubElement(element, key).text = value
     return ET.tostring(root, encoding="unicode")
+
+
+def _texture_dimensions(texture: Texture) -> tuple[float, float, bool]:
+    """Convert positive UV multipliers into observed explicit meter dimensions."""
+    scales = (texture.x_scale, texture.y_scale)
+    if any(not math.isfinite(value) or abs(value) < 1e-12 for value in scales):
+        raise ValueError("Enscape texture scales must be finite and non-zero")
+    uv_scale = tuple(texture.uv_scale)
+    if len(uv_scale) != 2 or any(not math.isfinite(value) or value <= 0 for value in uv_scale):
+        raise ValueError("Enscape texture.uv_scale must contain two finite, positive multipliers")
+    explicit = uv_scale != (1, 1)
+    if explicit and any(value < 0 for value in scales):
+        raise ValueError("Enscape explicit texture dimensions do not support mirrored native scales")
+    width, height = (abs(scale) * 0.0254 / factor for scale, factor in zip(scales, uv_scale))
+    if explicit and any(not math.isfinite(value) or value <= 1e-12 for value in (width, height)):
+        raise ValueError("Enscape explicit texture dimensions must be finite and greater than 1e-12 meters")
+    return width, height, explicit
 
 
 def prepare_enscape_export(model: Model, *, export_vray_materials: bool) -> tuple[Model, dict[int, str]]:
@@ -102,7 +121,7 @@ def prepare_enscape_export(model: Model, *, export_vray_materials: bool) -> tupl
         if material.transmission:
             fallback.alpha = 1 - material.transmission
         if material.texture is not None:
-            fallback.texture = replace(material.texture, brightness=1.0, inverted=False)
+            fallback.texture = replace(material.texture, brightness=1.0, inverted=False, uv_scale=(1.0, 1.0))
         prepared.materials.append(fallback)
     return prepared, material_data
 
@@ -135,8 +154,6 @@ def _validate(material: Material) -> None:
     _validate_factors(material)
     if material.texture is None:
         return
-    if material.texture.uv_scale != (1, 1):
-        raise ValueError("Enscape export does not yet support texture.uv_scale")
     brightness = material.texture.brightness
     if not math.isfinite(brightness) or brightness < 0:
         raise ValueError("Enscape texture brightness must be finite and nonnegative")

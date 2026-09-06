@@ -269,7 +269,7 @@ def test_factors_must_be_finite_and_in_range(field, value) -> None:
 @pytest.mark.parametrize(
     ("changes", "message"),
     [
-        ({"uv_scale": (2, 1)}, "uv_scale"),
+        ({"uv_scale": (-2, 1)}, "uv_scale"),
         ({"brightness": -1}, "brightness"),
         ({"brightness": float("nan")}, "brightness"),
     ],
@@ -278,3 +278,69 @@ def test_unrepresentable_texture_properties_are_rejected(changes, message) -> No
     material = Material(has_texture=True, texture=Texture(filename="paint.png", data=_PNG, **changes))
     with pytest.raises(ValueError, match=message):
         enscape_material_xml(material)
+
+
+def test_explicit_texture_dimensions_match_independent_meter_values() -> None:
+    material = _paint()
+    material.has_texture = True
+    material.texture = Texture(filename="paint.png", data=_PNG, x_scale=5000, y_scale=10000, uv_scale=(2, 4))
+    expected = _PAINT_XML.replace(
+        "</SketchupMaterial>",
+        "<DiffuseTexture><Source>SKETCHUP</Source><Filepath>paint.png</Filepath>"
+        "<Brightness>1</Brightness><IsInverted>false</IsInverted>"
+        "<UseExplicitTransformation>true</UseExplicitTransformation><Width>63.5</Width><Height>63.5</Height>"
+        "<Rotation>0</Rotation></DiffuseTexture></SketchupMaterial>",
+    )
+    assert enscape_material_xml(material).encode() == expected.encode()
+
+
+@pytest.mark.parametrize("format", ["modern", "sketchup_2017"])
+def test_public_export_preserves_uv_basis_and_explicit_scale_without_mutation(tmp_path, format) -> None:
+    model = new_model()
+    material = _paint()
+    material.has_texture = True
+    material.texture = Texture(filename="paint.png", data=_PNG, x_scale=5000, y_scale=10000, uv_scale=(2, 4))
+    model.materials.append(material)
+    destination = model.save(tmp_path / "scaled.skp", format=format, export_enscape_materials=True)
+    expected = "<UseExplicitTransformation>true</UseExplicitTransformation><Width>63.5</Width><Height>63.5</Height>"
+    if format == "modern":
+        with zipfile.ZipFile(destination) as archive:
+            raw = archive.read("model.dat")
+            xml = archive.read("materials/Paint/material.xml")
+        assert b'xScale="5000" yScale="10000"' in xml
+        assert expected.encode() in raw
+    else:
+        raw = destination.read_bytes()
+        assert struct.pack("<2d", 5000, 10000) in raw
+        assert expected.encode("utf-16-le") in raw
+    assert material.texture.uv_scale == (2, 4)
+    assert (material.texture.x_scale, material.texture.y_scale) == (5000, 10000)
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "message"),
+    [
+        ("uv_scale", (0, 1), "positive multipliers"),
+        ("uv_scale", (1,), "positive multipliers"),
+        ("uv_scale", (float("nan"), 1), "positive multipliers"),
+        ("uv_scale", (float("inf"), 1), "positive multipliers"),
+        ("uv_scale", (1e300, 1), "dimensions must be"),
+        ("uv_scale", (1e-320, 1), "dimensions must be"),
+        ("x_scale", float("nan"), "scales must be"),
+        ("x_scale", 0, "scales must be"),
+        ("y_scale", float("inf"), "scales must be"),
+        ("y_scale", -1, "mirrored native"),
+    ],
+)
+def test_invalid_mutated_texture_dimensions_fail_before_overwrite(tmp_path, field, value, message) -> None:
+    material = _paint()
+    material.has_texture = True
+    material.texture = Texture(filename="paint.png", data=_PNG, uv_scale=(2, 4))
+    setattr(material.texture, field, value)
+    model = new_model()
+    model.materials.append(material)
+    destination = tmp_path / "existing.skp"
+    destination.write_bytes(b"original")
+    with pytest.raises(ValueError, match=message):
+        model.save(destination, export_enscape_materials=True)
+    assert destination.read_bytes() == b"original"

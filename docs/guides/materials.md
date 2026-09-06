@@ -159,7 +159,12 @@ use the observed version-4 `SELF_ILLUMINATED` layout. These are metadata exports
 not a guarantee of identical rendering: independent SketchUp SDK tests check
 readability, metadata values and embedded image decoding, not Enscape output.
 
-Unsupported auxiliary maps, per-image UV multipliers, simultaneous glass and
+Positive per-image `Texture.uv_scale` multipliers are written as explicit
+Enscape dimensions: width is `x_scale * 0.0254 / uv_scale[0]` meters, and height
+uses the corresponding Y values. Native texture scales and mesh UVs are not
+changed. This Python option does not yet enable Blender mapping-node export.
+
+Unsupported auxiliary maps, mirrored explicit UV transforms, simultaneous glass and
 emission, and independent alpha plus transmission raise `ValueError` before
 replacing the destination. Tint/emission colors must have opaque alpha. Relief
 scalar settings can be retained, but active relief maps cannot yet be exported.
