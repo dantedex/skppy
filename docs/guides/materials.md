@@ -88,7 +88,7 @@ having a `metallic_texture` slot. Water, grass, foliage,
 clearcoat and nonzero per-map rotation are not
 translated. Nonzero texture rotation emits a warning. Mesh UVs retain the
 existing SketchUp texture scale; image nodes apply explicit width/height
-without modifying other maps. Invalid dimensions retain the SketchUp mapping
+without modifying other maps. Invalid dimensions or overflowing UV multipliers retain the SketchUp mapping
 and emit a warning. Normal-image brightness/inversion is applied before normal
 decoding, not to the resulting vector. Negative bump amounts use Blender's
 Bump inversion; negative displacement amounts retain their signed scale.

@@ -59,6 +59,8 @@ the project uses semantic versioning while the public API remains pre-1.0.
 
 ### Fixed
 
+- Keep native texture mapping when extreme Enscape dimensions would produce
+  non-finite UV multipliers, while retaining the other material properties.
 - Keep Blender imports isolated from existing materials and meshes; clean up
   newly created data-blocks after failed builds.
 - Preserve hard source edges and smooth generated triangulation diagonals

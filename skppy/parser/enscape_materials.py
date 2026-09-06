@@ -168,7 +168,13 @@ def _apply_texture_size(texture: Texture | None, element: ET.Element) -> Texture
     if width <= 1e-12 or height <= 1e-12:
         logger.warning("Invalid Enscape texture size for %r; retaining SketchUp mapping", texture.filename)
         return texture
-    texture.uv_scale = (texture.x_scale * 0.0254 / width, texture.y_scale * 0.0254 / height)
+    uv_scale = (texture.x_scale * 0.0254 / width, texture.y_scale * 0.0254 / height)
+    if any(not math.isfinite(value) or value == 0 for value in uv_scale):
+        logger.warning(
+            "Enscape texture size produces invalid UV multipliers for %r; retaining SketchUp mapping", texture.filename
+        )
+        return texture
+    texture.uv_scale = uv_scale
     if _float(element, "Rotation", 0.0) != 0.0:
         logger.warning("Enscape texture rotation is not yet supported for %r", texture.filename)
     return texture
