@@ -65,6 +65,16 @@ def test_built_addon_bundles_complete_legacy_parser(tmp_path, monkeypatch):
     }
     with zipfile.ZipFile(archive) as addon_zip:
         bundled_files = set(addon_zip.namelist())
+        assert {"skppy/parser/enscape_materials.py", "skppy/parser/vray_materials.py"} <= bundled_files
+        assert (
+            not {
+                "skppy/writer/enscape_materials.py",
+                "skppy/writer/vray_materials.py",
+                "enscape_export.py",
+                "enscape_diffuse.py",
+            }
+            & bundled_files
+        )
         absolute_internal_imports = {name for name in expected_parser_files if b"from skppy." in addon_zip.read(name)}
         addon_entrypoint = addon_zip.read("__init__.py")
         addon_manifest = tomllib.loads(addon_zip.read("blender_manifest.toml").decode("utf-8"))

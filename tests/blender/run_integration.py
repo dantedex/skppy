@@ -21,6 +21,7 @@ from fixture_data import legacy_v8_bytes, modern_zip_bytes
 from material_isolation import run as run_material_isolation
 from edge_shading import run as run_edge_shading
 from texture_interchange import run as run_texture_interchange
+from enscape_materials import run as run_enscape_materials
 
 
 def _arguments() -> argparse.Namespace:
@@ -659,8 +660,9 @@ def _run_export(module_name: str, export_output: Path | None = None) -> None:
     addon = importlib.import_module(module_name)
     exporter = importlib.import_module(f"{module_name}.export_builder")
     export_operator = bpy.ops.export_scene.skp.get_rna_type()
-    if export_operator.properties["export_vray_materials"].default is not False:
-        raise AssertionError("V-Ray material export must be opt-in")
+    for name in ("export_vray_materials", "export_enscape_materials"):
+        if name in export_operator.properties:
+            raise AssertionError(f"Renderer export option must not be exposed: {name}")
 
     collection = bpy.data.collections.new("Export Tag")
     bpy.context.scene.collection.children.link(collection)
@@ -806,7 +808,6 @@ def _run_export(module_name: str, export_output: Path | None = None) -> None:
             filepath=str(output),
             export_scope="SCENE",
             inches_per_unit=10.0,
-            export_vray_materials=True,
         )
         if "FINISHED" not in result or not output.is_file():
             raise AssertionError(f"SKP export did not finish: {result}")
@@ -816,7 +817,6 @@ def _run_export(module_name: str, export_output: Path | None = None) -> None:
             export_scope="SCENE",
             inches_per_unit=10.0,
             output_format="sketchup_2017",
-            export_vray_materials=True,
         )
         if "FINISHED" not in legacy_result or not legacy_output.is_file():
             raise AssertionError(f"SketchUp 2017 export did not finish: {legacy_result}")
@@ -826,12 +826,12 @@ def _run_export(module_name: str, export_output: Path | None = None) -> None:
         if len(loaded.definitions) != 3 or not any(len(value.entities.faces) == 1 for value in loaded.definitions):
             raise AssertionError("exported SKP lost reusable mesh geometry")
         loaded_material = next(value for value in loaded.materials if value.name == "Export Material")
-        _assert_close(loaded_material.metallic, 0.6, "modern V-Ray metallic")
-        _assert_close(loaded_material.roughness, 0.3, "modern V-Ray roughness")
+        _assert_close(loaded_material.metallic, 0.6, "modern native metallic")
+        _assert_close(loaded_material.roughness, 0.3, "modern native roughness")
         legacy_loaded = addon.skppy.load(legacy_output, import_vray_materials=True)
         legacy_material = next(value for value in legacy_loaded.materials if value.name == "Export Material")
-        _assert_close(legacy_material.metallic, 0.6, "legacy V-Ray metallic")
-        _assert_close(legacy_material.roughness, 0.3, "legacy V-Ray roughness")
+        _assert_close(legacy_material.metallic, 0.6, "legacy native metallic")
+        _assert_close(legacy_material.roughness, 0.3, "legacy native roughness")
         if export_output is not None:
             export_output.parent.mkdir(parents=True, exist_ok=True)
             export_output.write_bytes(output.read_bytes())
@@ -917,6 +917,7 @@ def main() -> None:
     """Install the addon and execute all requested integration scenarios."""
     args = _arguments()
     module_name = _install_extension(args.addon)
+    run_enscape_materials(module_name, _png_rgba(255))
     run_material_isolation(module_name)
     run_edge_shading(module_name)
     run_texture_interchange(module_name, _png_rgba(255))

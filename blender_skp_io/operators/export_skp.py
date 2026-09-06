@@ -60,11 +60,6 @@ class EXPORT_OT_skp(Operator, ExportHelper):
         description="Export material colors, opacity, metallic, and roughness",
         default=True,
     )
-    export_vray_materials: BoolProperty(
-        name="V-Ray Materials",
-        description="Generate V-Ray materials from Principled BSDF values while retaining the SketchUp appearance",
-        default=False,
-    )
     export_textures: BoolProperty(
         name="Embedded Textures",
         description="Embed packed or file-backed images linked to Base Color",
@@ -115,7 +110,6 @@ class EXPORT_OT_skp(Operator, ExportHelper):
         appearance.prop(self, "export_materials")
         column = appearance.column()
         column.enabled = self.export_materials
-        column.prop(self, "export_vray_materials")
         column.prop(self, "export_textures")
         column.prop(self, "export_uvs")
 
@@ -148,7 +142,6 @@ class EXPORT_OT_skp(Operator, ExportHelper):
             model.save(
                 self.filepath,
                 format=self.output_format,
-                export_vray_materials=self.export_materials and self.export_vray_materials,
             )
         except Exception as exc:
             self.report({"ERROR"}, f"Failed to export .skp file: {exc}")

@@ -133,15 +133,13 @@ class BlenderModelBuilder:
         if key in self._material_map:
             return self._material_map[key]
 
-        base_color, metallic, roughness, alpha, image = self._material_state(material)
         name = self._unique_name(material.name or "Material", self._material_names)
-        skp_material = self.model.add_material(
-            name,
-            color=skppy.Color(*(self._channel(value) for value in base_color[:3])),
-            alpha=min(max(float(alpha), 0.0), 1.0),
-            metallic=min(max(float(metallic), 0.0), 1.0),
-            roughness=min(max(float(roughness), 0.0), 1.0),
-        )
+        skp_material = self.model.add_material(name)
+        base_color, metallic, roughness, alpha, image = self._material_state(material)
+        skp_material.color = skppy.Color(*(self._channel(value) for value in base_color[:3]))
+        skp_material.alpha = min(max(float(alpha), 0.0), 1.0)
+        skp_material.metallic = min(max(float(metallic), 0.0), 1.0)
+        skp_material.roughness = min(max(float(roughness), 0.0), 1.0)
         if self.export_textures and image is not None:
             image_data = self._image_bytes(image)
             if image_data is not None:
@@ -188,26 +186,55 @@ class BlenderModelBuilder:
 
     def _warn_material_loss(self, material: Any, bsdf: Any) -> None:
         """Make unsupported renderer conversion visible in export reports."""
-        omitted = []
+        omitted = self._texture_graph_losses(material)
+        base = bsdf.inputs.get("Base Color")
+        if base is not None and base.is_linked and base.links[0].from_node.type != "TEX_IMAGE":
+            omitted.append("base-color node graph")
         for name in ("Metallic", "Roughness", "Normal"):
             socket = bsdf.inputs.get(name)
             if socket is not None and socket.is_linked:
                 omitted.append(f"{name} map")
-        for name, default in (("IOR", 1.5), ("IOR Level", 0.5), ("Specular IOR Level", 0.5)):
+        for name, default in (
+            ("IOR", 1.5),
+            ("IOR Level", 0.5),
+            ("Specular IOR Level", 0.5),
+            ("Transmission Weight", 0.0),
+        ):
             socket = bsdf.inputs.get(name)
             if socket is not None and (socket.is_linked or abs(socket.default_value - default) > 1e-6):
                 omitted.append(name)
         emission = bsdf.inputs.get("Emission Color")
         strength = bsdf.inputs.get("Emission Strength")
-        if emission is not None and strength is not None:
-            if emission.is_linked or strength.is_linked or (strength.default_value and any(emission.default_value[:3])):
-                omitted.append("emission")
+        if (
+            emission is not None
+            and strength is not None
+            and (
+                emission.is_linked or strength.is_linked or (strength.default_value and any(emission.default_value[:3]))
+            )
+        ):
+            omitted.append("emission")
         for node in material.node_tree.nodes:
             if node.type == "OUTPUT_MATERIAL" and node.inputs["Displacement"].is_linked:
                 omitted.append("displacement")
                 break
         if omitted:
             self.warnings.append(f"Material {material.name!r}: export omits {', '.join(omitted)}")
+
+    @staticmethod
+    def _texture_graph_losses(material: Any) -> list[str]:
+        """Notice opacity graphs and UV adjustments which are not baked on export."""
+        losses = []
+        bsdf = material.node_tree.nodes["Principled BSDF"]
+        alpha = bsdf.inputs["Alpha"]
+        if alpha.is_linked and alpha.links[0].from_node.type != "TEX_IMAGE":
+            losses.append("opacity node graph")
+        for node in material.node_tree.nodes:
+            if node.type != "TEX_IMAGE":
+                continue
+            vector = node.inputs["Vector"]
+            if vector.is_linked and vector.links[0].from_node.type not in {"TEX_COORD", "UVMAP"}:
+                return [*losses, "texture mapping"]
+        return losses
 
     def _linked_image(self, socket: Any, visited: set[int] | None = None) -> Any | None:
         visited = visited or set()
@@ -335,7 +362,7 @@ class BlenderModelBuilder:
             skp_edge.flags = flags
             edge_map[edge.index] = skp_edge
 
-        uv_data = mesh.uv_layers.active.data if self.export_uvs and mesh.uv_layers.active is not None else None
+        uv_data = self._mesh_uv_data(mesh)
         for polygon in mesh.polygons:
             self._populate_polygon(entities, mesh, obj, polygon, vertex_map, edge_map, uv_data)
 
@@ -347,7 +374,7 @@ class BlenderModelBuilder:
         vertex_map: dict[int, skppy.Vertex],
     ) -> None:
         """Merge compatible coplanar polygons and emit only retained edges."""
-        uv_data = mesh.uv_layers.active.data if self.export_uvs and mesh.uv_layers.active is not None else None
+        uv_data = self._mesh_uv_data(mesh)
         projections: dict[int, skppy.FaceUVProjection] = {}
         boundaries, positions = self._coplanar_boundaries(mesh, obj, uv_data, projections)
         regions = merge_coplanar_polygons(boundaries, positions)
@@ -355,6 +382,13 @@ class BlenderModelBuilder:
         polygon_by_index = {polygon.index: polygon for polygon in mesh.polygons}
         for region in regions:
             self._populate_region(entities, mesh, obj, region, polygon_by_index, vertex_map, edge_map, projections)
+
+    def _mesh_uv_data(self, mesh: Any) -> Any | None:
+        """Return the active UV data when texture-coordinate export is enabled."""
+        if not self.export_uvs:
+            return None
+        layer = mesh.uv_layers.active
+        return layer.data if layer is not None else None
 
     def _coplanar_boundaries(
         self,
