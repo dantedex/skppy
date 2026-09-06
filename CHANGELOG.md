@@ -23,6 +23,9 @@ the project uses semantic versioning while the public API remains pre-1.0.
 
 ### Changed
 
+- Export supported Blender diffuse tint, image-fade, brightness and inversion
+  graphs to Enscape metadata without changing image pixels or alpha. Recognize
+  validated operations and links independently of node labels.
 - Import embedded explicit Enscape opacity masks with brightness, inversion,
   map sizing and opacity multiplication. Preserve missing-image fallback and
   warn about unsupported host-derived mask adjustments.

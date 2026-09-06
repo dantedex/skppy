@@ -112,15 +112,28 @@ emission strength. Materials without nodes use their viewport appearance
 (Blender 4.5); Blender 5.2's node-based materials use their active shader.
 Colors are converted from Blender's linear values to serialized sRGB bytes.
 
-A direct base-color Image Texture is supported with a static sRGB image,
+Base-color Image Textures are supported with a static sRGB image,
 flat/repeating mapping, linear interpolation and the active UV coordinates.
 Image alpha may connect directly to Principled Alpha, or through multiplication
 by a constant opacity. Transparent image pixels require that alpha connection.
 Packed or file-backed bytes are embedded when **Embedded Textures** is enabled;
 unavailable bytes cause an error in this mode.
 
+The importer-created diffuse adjustment chain is also supported:
+
+`Image → Invert → Multiply brightness/tint → Mix with base color → Principled`
+
+Each adjustment is optional. Invert must use full strength; up to two MixRGB
+Multiply nodes must use factor `1` and constant color multipliers. An optional
+outer MixRGB Mix node supplies the constant base color and image-fade factor.
+Clamping, alpha-dependent factors, linked multipliers and other operation
+orders are rejected. Node labels do not affect recognition. Equal RGB
+multipliers are combined into brightness, so neutral tints may be represented
+by an equivalent brightness value. Other tint colors use Enscape's 8-bit sRGB
+representation. Image pixels and their separate alpha are left unchanged.
+
 This option is stricter than the default exporter: unsupported base-color
-graphs (including imported tint/brightness/fade graphs), auxiliary maps, UV
+graphs outside this chain, auxiliary maps, UV
 transforms, linked scalar inputs, alternate surface shaders, volume and
 displacement graphs cause an error before replacing the destination. Coat,
 sheen, subsurface, anisotropy, thin film, thin-wall settings and diffuse

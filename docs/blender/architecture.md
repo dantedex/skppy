@@ -13,6 +13,7 @@ blender_skp_io/blender_skp_io/
 +- blender_manifest.toml# Extension manifest (version, Blender minimum)
 +- export_builder.py    # BlenderModelBuilder - Blender to public Model
 +- enscape_export.py    # Strict active-Principled adapter for Enscape export
++- enscape_diffuse.py   # Bounded recognition of supported diffuse adjustment graphs
 +- material_builder.py  # Isolated material nodes and packed image resources
 +- import_transaction.py# Failure cleanup for newly created data-blocks
 +- scene_builder.py     # BlenderSceneBuilder - main conversion logic

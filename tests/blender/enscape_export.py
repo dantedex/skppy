@@ -71,11 +71,16 @@ def run(module_name: str, pixels: bytes, export_output: Path | None) -> None:
         alpha.inputs[1].default_value = 0.75
         tree.links.new(texture.outputs["Alpha"], alpha.inputs[0])
         tree.links.new(alpha.outputs[0], bsdf.inputs["Alpha"])
+        _add_diffuse_adjustments(tree, texture, bsdf)
+        _check_diffuse_variants(builder_type, material, bsdf, texture)
         exporter = builder_type(bpy.context, export_scope="SELECTED", export_enscape_materials=True)
         converted = exporter.build().materials[0]
         assert (converted.color.r, converted.color.g, converted.color.b) == (128, 64, 0)
         assert (converted.metallic, converted.roughness, converted.specular, converted.ior) == (0.5, 0.25, 0.25, 2)
         assert converted.alpha == 0.75 and converted.texture.data == pixels
+        assert converted.texture.brightness == 0.5 and converted.texture.inverted is True
+        assert converted.texture_fade == 0.25
+        assert (converted.tint_color.r, converted.tint_color.g, converted.tint_color.b) == (128, 255, 64)
         assert exporter.warnings == []
         for format in ("modern", "sketchup_2017"):
             path = directory / f"enscape_export_{format}.skp"
@@ -103,6 +108,9 @@ def run(module_name: str, pixels: bytes, export_output: Path | None) -> None:
                 "<Specular>0.25</Specular>",
                 "<Opacity>0.75</Opacity>",
                 "<Source>SKETCHUP</Source>",
+                "<TintColor>#80FF40</TintColor>",
+                "<ImageFade>0.25</ImageFade>",
+                "<Brightness>0.5</Brightness><IsInverted>true</IsInverted>",
             ):
                 assert expected.encode(encoding) in raw
             if export_output is not None:
@@ -123,6 +131,59 @@ def run(module_name: str, pixels: bytes, export_output: Path | None) -> None:
     bpy.data.objects.remove(obj, do_unlink=True)
 
 
+def _add_diffuse_adjustments(tree, image, bsdf) -> None:
+    """Author the expected graph directly, without the production importer."""
+    invert = tree.nodes.new("ShaderNodeInvert")
+    invert.name = "Invert check"
+    invert.inputs["Fac"].default_value = 1
+    tree.links.new(image.outputs["Color"], invert.inputs["Color"])
+    brightness = tree.nodes.new("ShaderNodeMixRGB")
+    brightness.name = "Brightness check"
+    brightness.blend_type = "MULTIPLY"
+    brightness.inputs[0].default_value = 1
+    brightness.inputs[2].default_value = (0.5, 0.5, 0.5, 1)
+    tree.links.new(invert.outputs["Color"], brightness.inputs[1])
+    tint = tree.nodes.new("ShaderNodeMixRGB")
+    tint.name = "Tint check"
+    tint.blend_type = "MULTIPLY"
+    tint.inputs[0].default_value = 1
+    tint.inputs[2].default_value = (0.2158605, 1, 0.05126946, 1)
+    tree.links.new(brightness.outputs["Color"], tint.inputs[1])
+    fade = tree.nodes.new("ShaderNodeMixRGB")
+    fade.name = "Fade check"
+    fade.blend_type = "MIX"
+    fade.inputs[0].default_value = 0.25
+    fade.inputs[1].default_value = (0.2158605, 0.05126946, 0, 1)
+    tree.links.new(tint.outputs["Color"], fade.inputs[2])
+    tree.links.new(fade.outputs["Color"], bsdf.inputs["Base Color"])
+    for node in (invert, brightness, tint, fade):
+        node.label = "Artist renamed this node"
+
+
+def _check_diffuse_variants(builder_type, material, bsdf, image) -> None:
+    """Check every supported prefix and equivalent neutral tint multiplication."""
+    tree = material.node_tree
+    cases = (
+        (image, 1, False, (255, 255, 255), 1),
+        (tree.nodes["Invert check"], 1, True, (255, 255, 255), 1),
+        (tree.nodes["Brightness check"], 0.5, True, (255, 255, 255), 1),
+        (tree.nodes["Tint check"], 0.5, True, (128, 255, 64), 1),
+        (tree.nodes["Fade check"], 0.5, True, (128, 255, 64), 0.25),
+    )
+    for output, brightness, inverted, tint, fade in cases:
+        tree.links.new(output.outputs["Color"], bsdf.inputs["Base Color"])
+        converted = builder_type(bpy.context, export_enscape_materials=True)._material_for(material)
+        assert converted.texture.brightness == brightness and converted.texture.inverted == inverted
+        assert (converted.tint_color.r, converted.tint_color.g, converted.tint_color.b) == tint
+        assert converted.texture_fade == fade
+    tint_node = tree.nodes["Tint check"]
+    tint_node.inputs[2].default_value = (0.5, 0.5, 0.5, 1)
+    converted = builder_type(bpy.context, export_enscape_materials=True)._material_for(material)
+    assert converted.texture.brightness == 0.25
+    assert (converted.tint_color.r, converted.tint_color.g, converted.tint_color.b) == (255, 255, 255)
+    tint_node.inputs[2].default_value = (0.2158605, 1, 0.05126946, 1)
+
+
 def _check_rejections(builder_type, material, bsdf, texture, directory: Path) -> None:
     """Reject unsupported state and keep existing files intact on operator failure."""
     tree = material.node_tree
@@ -134,6 +195,33 @@ def _check_rejections(builder_type, material, bsdf, texture, directory: Path) ->
             assert message in str(exc), str(exc)
         else:
             raise AssertionError(f"expected Enscape export to reject {message}")
+
+    brightness = tree.nodes["Brightness check"]
+    fade = tree.nodes["Fade check"]
+    invert = tree.nodes["Invert check"]
+    for node in (brightness, fade):
+        node.use_clamp = True
+        expect_rejection("unclamped")
+        node.use_clamp = False
+    brightness.inputs[0].default_value = 0.5
+    expect_rejection("factor 1")
+    brightness.inputs[0].default_value = 1
+    invert.inputs["Fac"].default_value = 0.5
+    expect_rejection("full-strength")
+    invert.inputs["Fac"].default_value = 1
+    input_link = tree.links.new(texture.outputs["Color"], fade.inputs[1])
+    expect_rejection("constant base color")
+    tree.links.remove(input_link)
+    brightness.inputs[2].default_value = (-0.5, -0.5, -0.5, 1)
+    # Blender clamps negative color channels to zero before the adapter sees them.
+    assert tuple(brightness.inputs[2].default_value[:3]) == (0, 0, 0)
+    black = builder_type(bpy.context, export_enscape_materials=True)._material_for(material)
+    assert black.texture.brightness == 0
+    brightness.inputs[2].default_value = (0.5, 0.5, 0.5, 1)
+    tint = tree.nodes["Tint check"]
+    tint.inputs[2].default_value = (2, 1, 0.5, 1)
+    expect_rejection("tint multipliers")
+    tint.inputs[2].default_value = (0.2158605, 1, 0.05126946, 1)
 
     link = tree.links.new(texture.outputs["Color"], bsdf.inputs["Roughness"])
     expect_rejection("linked Roughness")

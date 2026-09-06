@@ -10,9 +10,10 @@ from typing import Any
 import numpy as np
 
 from . import skppy
+from .enscape_diffuse import DiffuseImage, read_diffuse
 
 
-def populate_material(source: Any, target: skppy.Material, channel: Callable[[float], int]) -> Any | None:
+def populate_material(source: Any, target: skppy.Material, channel: Callable[[float], int]) -> DiffuseImage | None:
     """Copy supported appearance into *target*; reject unrepresented shader state."""
     if not source.use_nodes or source.node_tree is None:
         target.color = _color(source.diffuse_color, channel)
@@ -31,9 +32,11 @@ def populate_material(source: Any, target: skppy.Material, channel: Callable[[fl
     target.transmission = float(bsdf.inputs["Transmission Weight"].default_value)
     target.emission_strength = float(bsdf.inputs["Emission Strength"].default_value)
     target.emission_color = _color(bsdf.inputs["Emission Color"].default_value, channel)
-    image_node = _base_image(bsdf)
-    _read_alpha(bsdf.inputs["Alpha"], image_node, target)
-    return image_node.image if image_node is not None else None
+    diffuse = read_diffuse(bsdf.inputs["Base Color"], target, lambda values: _color(values, channel))
+    if diffuse is not None:
+        _validate_image(diffuse.node)
+    _read_alpha(bsdf.inputs["Alpha"], diffuse.node if diffuse is not None else None, target)
+    return diffuse
 
 
 def _color(values: Any, channel: Callable[[float], int]) -> skppy.Color:
@@ -81,14 +84,7 @@ def _validate_shader(bsdf: Any) -> None:
         raise ValueError("Enscape export does not support Specular Tint")
 
 
-def _base_image(bsdf: Any) -> Any | None:
-    base = bsdf.inputs["Base Color"]
-    if not base.is_linked:
-        return None
-    link = base.links[0]
-    node = link.from_node
-    if node.type != "TEX_IMAGE" or link.from_socket.name != "Color" or node.mute or node.image is None:
-        raise ValueError("Enscape export supports only a direct base-color image")
+def _validate_image(node: Any) -> None:
     if node.image.source not in {"FILE", "GENERATED"} or node.image.colorspace_settings.name != "sRGB":
         raise ValueError("Enscape export requires a static sRGB base-color image")
     if node.projection != "FLAT" or node.extension != "REPEAT":
@@ -100,7 +96,6 @@ def _base_image(bsdf: Any) -> Any | None:
         mapping = vector.links[0]
         if mapping.from_node.type != "TEX_COORD" or mapping.from_socket.name != "UV":
             raise ValueError("Enscape export requires the active UV mapping without transforms")
-    return node
 
 
 def _read_alpha(socket: Any, image_node: Any | None, material: skppy.Material) -> None:

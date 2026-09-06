@@ -138,9 +138,11 @@ class BlenderModelBuilder:
 
         name = self._unique_name(material.name or "Material", self._material_names)
         skp_material = self.model.add_material(name)
+        diffuse = None
         if self.export_enscape_materials:
             try:
-                image = populate_enscape_material(material, skp_material, self._channel)
+                diffuse = populate_enscape_material(material, skp_material, self._channel)
+                image = diffuse.node.image if diffuse is not None else None
             except ValueError as exc:
                 raise ValueError(f"Material {material.name!r}: {exc}") from exc
         else:
@@ -159,6 +161,8 @@ class BlenderModelBuilder:
                     x_scale=self._positive_custom(material, "skppy_x_scale", 1.0),
                     y_scale=self._positive_custom(material, "skppy_y_scale", 1.0),
                     data=image_data,
+                    brightness=diffuse.brightness if diffuse is not None else 1.0,
+                    inverted=diffuse.inverted if diffuse is not None else False,
                 )
             else:
                 if self.export_enscape_materials:
