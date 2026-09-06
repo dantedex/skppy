@@ -16,12 +16,43 @@ the project uses semantic versioning while the public API remains pre-1.0.
 
 ### Changed
 
+- Remove Enscape and V-Ray material export from the Python API and Blender
+  addon. Renderer support is import-only; export is deferred to a future
+  feature. Native SketchUp material export remains available.
+- Import embedded explicit Enscape opacity masks with brightness, inversion,
+  map sizing and opacity multiplication. Preserve missing-image fallback and
+  warn about unsupported host-derived mask adjustments.
+- Preserve negative Enscape bump/displacement amounts and apply normal-map
+  color brightness/inversion before normal decoding in Blender.
+- Apply Enscape explicit map width and height through independent Blender UV
+  multipliers. Preserve mesh UVs, reject invalid dimensions, and report
+  unsupported nonzero rotation and texture-mapping loss on export.
+- Convert Enscape version-5 glass opacity to Principled transmission instead
+  of removing its surface through alpha; retain its IOR and roughness, and
+  report transmission loss when exporting to currently supported SKP formats.
+- Import Enscape texture tint and image fade, resolve `Source=SKETCHUP` from
+  the owning material even when its renderer filename is stale, and convert
+  material colors to Blender's linear color space. Report unsupported diffuse
+  node graphs during export instead of silently dropping their appearance.
+- Prefer valid Enscape metadata over V-Ray when both describe the same material;
+  malformed Enscape metadata still permits the V-Ray fallback.
+- Import Enscape diffuse color, opacity, and embedded diffuse textures. Keep
+  the SketchUp texture when the renderer's replacement image is unavailable.
+- Decode Enscape material attributes in legacy SKP files as well as modern
+  SKP and SKM packages, respecting the configured XML size budget and reusing
+  only each material's own embedded image for matching map references.
+- Apply Enscape diffuse texture brightness and inversion in Blender while
+  keeping image alpha separate and multiplying it by material opacity.
 - Broaden the Blender `Use V-Ray Materials` option to `Use Render Materials`;
   the compatible `import_vray_materials` property now enables both V-Ray and
   Enscape metadata.
 
 ### Fixed
 
+- Warn when an Enscape material type is unsupported instead of silently
+  treating it as generic; retain the supported common properties and maps.
+- Keep native texture mapping when extreme Enscape dimensions would produce
+  non-finite UV multipliers, while retaining the other material properties.
 - Keep Blender imports isolated from existing materials and meshes; clean up
   newly created data-blocks after failed builds.
 - Preserve hard source edges and smooth generated triangulation diagonals

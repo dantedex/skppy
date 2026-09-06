@@ -22,6 +22,9 @@ materials. The addon converts geometry, reusable components, collection
 instances, materials/textures, UVs, tags, cameras/scenes, text annotations, and
 scalar custom properties.
 
+Enscape and V-Ray material support is import-only. Renderer-specific export
+is deferred to a future feature; native SketchUp material export is available.
+
 ## Documentation
 
 The complete documentation is published at

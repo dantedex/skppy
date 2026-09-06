@@ -54,10 +54,73 @@ material = skppy.load_material("stone.skm", import_vray_materials=True)
 ```
 
 The compatibility keyword retains its original name, but enables both V-Ray
-and Enscape metadata. Supported properties include metallic, roughness,
-specular, IOR, emission, bump, normal, and displacement values. Auxiliary maps
-use the `metallic_texture`, `roughness_texture`, `bump_texture`,
-`normal_texture`, and `displacement_texture` slots.
+and Enscape metadata. Valid Enscape metadata takes precedence when both are
+present; malformed or absent Enscape metadata permits the V-Ray fallback.
+This same option is accepted by `skppy.load()` for modern and legacy SKP files.
+
+(enscape-import-coverage)=
+### Enscape import coverage
+
+The decoder handles the `Enscape.Material` dictionary's `MaterialData` XML,
+including the `SketchupMaterial Version="4"` layout observed in compatibility
+samples. No external renderer or plugin is needed.
+
+| Enscape control | Imported value / Blender behavior |
+| --- | --- |
+| `DiffuseColor`, `Opacity` | Base color and opacity; opacity multiplies diffuse image alpha |
+| `TintColor`, `ImageFade` | Multiply the diffuse image by its tint, then blend it with the untextured base color |
+| `Metallic`, `Roughness`, `Specular` | Metallic, roughness, and specular scalar values |
+| `IndexOfRefraction` | Principled IOR |
+| `TypeV5=GLASS` (or `Type=GLASS`) | Glass opacity becomes transmission (`1 - Opacity`); surface alpha remains opaque so reflections survive |
+| `EmissiveColor`, `EmissiveStrength` | Emission color and strength |
+| `DiffuseTexture` | Embedded diffuse image; retain the SketchUp image when the replacement is missing |
+| Texture `Source=SKETCHUP` | Use the material's own embedded image, ignoring a stale renderer filename |
+| `RoughnessTexture` | Non-Color roughness map |
+| Explicit `MaskTexture` | Grayscale opacity mask multiplied by material opacity; replaces diffuse image alpha when available |
+| `BumpMapType=BUMP`, `BumpAmount` | Height map through a Bump node |
+| `BumpMapType=NORMAL`, `NormalMapIntensity` | Tangent-space Normal Map node |
+| `BumpMapType=DISPLACEMENT`, `BumpAmount` | Displacement node; actual geometry displacement depends on Blender render settings |
+| `Brightness`, `IsInverted` | Applied to diffuse, scalar, and normal image colors before shader interpretation |
+| `UseExplicitTransformation`, `Width`, `Height` | Independent map sizes in meters, applied through per-image UV multipliers |
+
+The documented Enscape reflection texture controls roughness, while metallic
+is a scalar control; see the [Enscape material types reference](https://docs-chaos.atlassian.net/wiki/spaces/enscape/pages/841252963/Material+Types).
+The shared `Material.metallic_texture` field does not establish an Enscape
+metallic-map encoding, and this decoder does not implement one.
+Water, grass, carpet, foliage, clearcoat and nonzero per-map rotation are not
+translated. Unknown material types emit a warning naming the material and
+type; supported common properties and maps are still imported. `TypeV5`
+takes precedence over `Type` when nonempty. Nonzero texture rotation also
+emits a warning. Mesh UVs retain the
+existing SketchUp texture scale; image nodes apply explicit width/height
+without modifying other maps. Invalid dimensions or overflowing UV multipliers retain the SketchUp mapping
+and emit a warning. Normal-image brightness/inversion is applied before normal
+decoding, not to the resulting vector. Negative bump amounts use Blender's
+Bump inversion; negative displacement amounts retain their signed scale.
+Enscape support is import-only; renderer-specific export is a future feature.
+
+Explicit opacity masks use `Material.opacity_texture`, with independent size,
+brightness and inversion. Missing mask images retain the existing opacity or
+diffuse-alpha fallback. Host-derived masks (`Source=SKETCHUP`) currently emit a
+warning and keep the existing diffuse-alpha behavior: their channel/adjustment
+semantics have not been independently established.
+
+Glass uses a Principled transmission approximation, with imported roughness
+and IOR. It does not reproduce Enscape's thin/solid-glass distinction or
+renderer-specific caustics. Refraction quality depends on Blender's render
+engine, settings, and the imported geometry. The newer `TypeV5` field takes
+precedence over its older `Type` fallback, as observed in version-5 materials.
+
+The tint/image-fade conversion follows the controls described in the
+[Enscape material manual](https://docs-chaos.atlassian.net/wiki/spaces/enscape/pages/841252963/Material+Types).
+Colors are converted from serialized sRGB to Blender scene-linear values;
+image adjustments use editable shader nodes and do not alter the packed pixels.
+
+Legacy SKP decoding reuses a material's own embedded texture only when the map
+filename matches (case-insensitively). Other maps remain missing references;
+images from unrelated materials are not substituted. Invalid or oversized
+optional Enscape XML is ignored, leaving the SketchUp/V-Ray fallback intact.
+The XML budget is configurable through `skppy.LoadLimits(max_xml_bytes=...)`.
 
 Some SKM libraries reference auxiliary images through creator-machine paths
 without embedding those images. skppy retains the safe basename and renderer
@@ -71,10 +134,19 @@ if roughness:
         print("The SKM references this map but does not contain its pixels")
 ```
 
-Only archive entries are eligible for automatic loading. skppy never opens an
-absolute path serialized by another machine.
+Only embedded images are eligible for automatic loading. skppy never opens an
+absolute path serialized by another machine. In SKM/modern SKP packages, a
+declared safe ZIP path takes precedence over the current material's folder and
+an unambiguous basename match. Ambiguous images are not guessed.
 
 ---
+
+## Renderer export
+
+Enscape and V-Ray support is import-only. Generating renderer-specific material
+metadata and maps is deferred to a future feature. Native SketchUp export
+remains available; see [Writing models](writing.md) for its supported material
+properties and validation rules.
 
 ## Accessing texture data
 

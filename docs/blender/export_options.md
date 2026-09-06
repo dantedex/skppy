@@ -19,7 +19,6 @@ file untouched.
 | **Apply Modifiers** | On | Uses evaluated mesh data with the current modifier stack. Unmodified shared mesh data remains one reusable SKP definition. |
 | **Merge Coplanar Faces** | On | Merges adjacent polygons on the same plane when their material and UV projection match. Internal edges are removed and enclosed boundaries become face holes. |
 | **Materials and PBR** | On | Preserves Base Color, Alpha, Metallic, and Roughness from the Principled BSDF. |
-| **V-Ray Materials** | Off | Generates V-Ray material graphs from Base Color, Alpha, Metallic, and Roughness while retaining the normal SketchUp appearance as a fallback. |
 | **Embedded Textures** | On | Embeds packed or file-backed images linked to Base Color. Procedural-only node graphs are not baked. |
 | **UV Coordinates** | On | Converts the active UV layer to per-face SKP projections and control points. |
 | **Collections as Tags** | On | Uses `skppy_layer_name` when present; otherwise uses the object's first collection. |
@@ -90,7 +89,7 @@ legacy output support.
 
 ## Materials and textures
 
-The exporter reads the Principled BSDF when available and falls back to the
+By default, the exporter reads the Principled BSDF when available and falls back to the
 material's viewport diffuse state. Linked Image Texture nodes are followed
 through intermediate nodes. Packed images and existing image files are embedded
 in the SKP; generated or procedural images without bytes produce a warning and
@@ -99,24 +98,15 @@ leave the material untextured.
 Optional material custom properties `skppy_x_scale` and `skppy_y_scale` set the
 physical texture tile size in SketchUp inches. Both default to `1.0`.
 
-When **V-Ray Materials** is enabled, the exporter adds a deterministic
-`MtlSingleBRDF` -> `BRDFVRayMtl` graph to every exported material. Base colour
-is converted from sRGB to V-Ray's linear colour representation; opacity,
-metallic, and roughness remain normalized factors. The graph targets the V-Ray
-metadata generation observed for each output container: plugin version 23 for
-modern SKP and version 16 for SketchUp Make 2017.
-
-The ordinary SketchUp material and native PBR block are always written too, so
-SketchUp and importers without V-Ray retain a useful appearance. An embedded
-base-colour image is also connected through a V-Ray `TexBitmap`,
-`BitmapBuffer`, and `UVWGenChannel` graph. The bitmap uses the same embedded
-image basename and face UV channel as the native SketchUp texture.
+Enscape and V-Ray materials are supported for import only. Renderer-specific
+export is deferred to a future feature; this exporter writes native SketchUp
+materials.
 
 The export material subset is Base Color, Alpha, Metallic, Roughness, and the
 base-color image. Import support for renderer maps does not imply export
 support for those maps. The Python writer rejects unsupported public material
 properties rather than silently discarding them; it also rejects duplicate
-material names. V-Ray export does not broaden this subset.
+material names.
 The Blender adapter reports omitted renderer maps, non-default IOR/specular,
 emission, and displacement as conversion warnings before returning its supported
 material subset. Review these warnings when exporting imported render materials.

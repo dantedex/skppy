@@ -143,16 +143,22 @@ bump, or displacement map supplies the scale, in that order.
 Prefer PBR appearance values stored by V-Ray or Enscape when a material contains
 supported renderer metadata. The importer reads diffuse colour, metallic,
 roughness, specular level, IOR, emission, bump strength, normal intensity,
-displacement scale, and referenced PBR texture slots. Materials without
-supported renderer metadata continue to use their SketchUp appearance.
+displacement scale, and referenced PBR texture slots. Enscape import works in
+legacy SKP, modern SKP, and standalone SKM files. When both Enscape and V-Ray
+metadata exist, valid Enscape metadata takes precedence; the importer does not
+mix the two renderers' values. Materials without supported renderer metadata
+continue to use their SketchUp appearance.
 
 **Disable** (default): Use SketchUp colour, texture, opacity, and native PBR
 values. This preserves the appearance shown by SketchUp.
 
 **Enable**: Override supported SketchUp appearance values with renderer PBR
-counterparts when present. Embedded maps are packed into the `.blend`, marked
-as Non-Color data, and connected to the Principled material. Source inversion
-and brightness values are included in scalar map node chains.
+counterparts when present. Embedded maps are packed into the `.blend` and
+connected to the Principled material. Diffuse maps use sRGB; scalar and relief
+maps use Non-Color data. Diffuse and scalar map nodes include source inversion
+and brightness. Enscape opacity multiplies diffuse image alpha without
+changing the source pixels. A missing Enscape diffuse replacement preserves
+the embedded SketchUp texture.
 
 Many third-party SKM packages store only an absolute path such as `C:\maps\normal.jpg`
 for auxiliary maps while embedding only the base-colour image. The importer
@@ -160,6 +166,10 @@ never reads that external path. It preserves the basename in a Blender material
 custom property such as `skppy_normal_texture` or `skppy_roughness_texture`, but
 cannot create an image node without image bytes. Put the map inside the SKM ZIP
 to make it portable.
+
+See the {ref}`Enscape support table <enscape-import-coverage>`
+for supported controls and limitations. This converts supported appearances;
+it does not reproduce every Enscape material type or render effect.
 
 This option affects material parsing even when **Import Materials** is disabled.
 For a model, parsed materials are only created when **Import Materials** is
