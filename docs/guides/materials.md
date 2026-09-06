@@ -162,7 +162,8 @@ readability, metadata values and embedded image decoding, not Enscape output.
 Positive per-image `Texture.uv_scale` multipliers are written as explicit
 Enscape dimensions: width is `x_scale * 0.0254 / uv_scale[0]` meters, and height
 uses the corresponding Y values. Native texture scales and mesh UVs are not
-changed. This Python option does not yet enable Blender mapping-node export.
+changed. Blender's Enscape exporter also recognizes the supported scale-only
+mapping nodes described in [Blender export options](../blender/export_options.md).
 
 Unsupported auxiliary maps, mirrored explicit UV transforms, simultaneous glass and
 emission, and independent alpha plus transmission raise `ValueError` before

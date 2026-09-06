@@ -163,6 +163,7 @@ class BlenderModelBuilder:
                     data=image_data,
                     brightness=diffuse.brightness if diffuse is not None else 1.0,
                     inverted=diffuse.inverted if diffuse is not None else False,
+                    uv_scale=diffuse.uv_scale if diffuse is not None else (1.0, 1.0),
                 )
             else:
                 if self.export_enscape_materials:
@@ -377,7 +378,7 @@ class BlenderModelBuilder:
             skp_edge.flags = flags
             edge_map[edge.index] = skp_edge
 
-        uv_data = mesh.uv_layers.active.data if self.export_uvs and mesh.uv_layers.active is not None else None
+        uv_data = self._mesh_uv_data(mesh)
         for polygon in mesh.polygons:
             self._populate_polygon(entities, mesh, obj, polygon, vertex_map, edge_map, uv_data)
 
@@ -389,7 +390,7 @@ class BlenderModelBuilder:
         vertex_map: dict[int, skppy.Vertex],
     ) -> None:
         """Merge compatible coplanar polygons and emit only retained edges."""
-        uv_data = mesh.uv_layers.active.data if self.export_uvs and mesh.uv_layers.active is not None else None
+        uv_data = self._mesh_uv_data(mesh)
         projections: dict[int, skppy.FaceUVProjection] = {}
         boundaries, positions = self._coplanar_boundaries(mesh, obj, uv_data, projections)
         regions = merge_coplanar_polygons(boundaries, positions)
@@ -397,6 +398,15 @@ class BlenderModelBuilder:
         polygon_by_index = {polygon.index: polygon for polygon in mesh.polygons}
         for region in regions:
             self._populate_region(entities, mesh, obj, region, polygon_by_index, vertex_map, edge_map, projections)
+
+    def _mesh_uv_data(self, mesh: Any) -> Any | None:
+        """Match Enscape's supported shader UV source without changing the editing layer."""
+        if not self.export_uvs:
+            return None
+        layer = mesh.uv_layers.active
+        if self.export_enscape_materials:
+            layer = next((candidate for candidate in mesh.uv_layers if candidate.active_render), layer)
+        return layer.data if layer is not None else None
 
     def _coplanar_boundaries(
         self,

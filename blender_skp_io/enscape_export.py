@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from dataclasses import replace
 import math
 from typing import Any
 
@@ -35,6 +36,7 @@ def populate_material(source: Any, target: skppy.Material, channel: Callable[[fl
     diffuse = read_diffuse(bsdf.inputs["Base Color"], target, lambda values: _color(values, channel))
     if diffuse is not None:
         _validate_image(diffuse.node)
+        diffuse = replace(diffuse, uv_scale=_image_uv_scale(diffuse.node))
     _read_alpha(bsdf.inputs["Alpha"], diffuse.node if diffuse is not None else None, target)
     return diffuse
 
@@ -91,11 +93,51 @@ def _validate_image(node: Any) -> None:
         raise ValueError("Enscape export requires flat, repeating image mapping")
     if node.interpolation != "Linear":
         raise ValueError("Enscape export requires linear image interpolation")
-    vector = node.inputs["Vector"]
-    if vector.is_linked:
-        mapping = vector.links[0]
-        if mapping.from_node.type != "TEX_COORD" or mapping.from_socket.name != "UV":
-            raise ValueError("Enscape export requires the active UV mapping without transforms")
+
+
+def _image_uv_scale(image_node: Any) -> tuple[float, float]:
+    vector = image_node.inputs["Vector"]
+    if not vector.is_linked:
+        return (1.0, 1.0)
+    link = vector.links[0]
+    node = link.from_node
+    if node.type in {"VECT_MATH", "MAPPING"} and link.from_socket.name != "Vector":
+        raise ValueError("Enscape UV mapping requires a Vector output")
+    scale = (1.0, 1.0, 1.0)
+    if node.type == "VECT_MATH" and node.operation == "MULTIPLY":
+        if node.mute or node.inputs[1].is_linked:
+            raise ValueError("Enscape UV multiplication requires an unmuted node and a constant multiplier")
+        scale = tuple(node.inputs[1].default_value)
+        vector = node.inputs[0]
+    elif node.type == "MAPPING":
+        scale = _mapping_scale(node)
+        vector = node.inputs["Vector"]
+    if not vector.is_linked:
+        raise ValueError("Enscape export requires a linked active UV source")
+    source = vector.links[0]
+    if not _is_active_uv(source):
+        raise ValueError("Enscape export requires the active UV mapping with at most one supported scale node")
+    if any(not math.isfinite(value) or value <= 0 for value in scale) or scale[2] != 1:
+        raise ValueError("Enscape UV scale must be finite and positive, with Z equal to 1")
+    return (scale[0], scale[1])
+
+
+def _is_active_uv(link: Any) -> bool:
+    node = link.from_node
+    if node.mute or link.from_socket.name != "UV" or getattr(node, "from_instancer", False):
+        return False
+    return node.type == "TEX_COORD" or (node.type == "UVMAP" and not node.uv_map)
+
+
+def _mapping_scale(node: Any) -> tuple[float, float, float]:
+    if node.mute or node.vector_type != "POINT":
+        raise ValueError("Enscape export requires an unmuted Point mapping node")
+    for name in ("Location", "Rotation", "Scale"):
+        if node.inputs[name].is_linked:
+            raise ValueError(f"Enscape export requires constant mapping {name}")
+    if any(node.inputs[name].default_value[index] != 0 for name in ("Location", "Rotation") for index in range(3)):
+        raise ValueError("Enscape export does not yet support mapping translation or rotation")
+    return tuple(node.inputs["Scale"].default_value)
 
 
 def _read_alpha(socket: Any, image_node: Any | None, material: skppy.Material) -> None:

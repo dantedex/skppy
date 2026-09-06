@@ -36,6 +36,14 @@ def run(module_name: str, pixels: bytes, export_output: Path | None) -> None:
     bpy.data.materials.remove(viewport)
     mesh = bpy.data.meshes.new("Enscape export mesh")
     mesh.from_pydata([(0, 0, 0), (1, 0, 0), (0, 1, 0)], [], [(0, 1, 2)])
+    mesh.uv_layers.new(name="Rendered")
+    mesh.uv_layers.new(name="Editing")
+    for entry, uv in zip(mesh.uv_layers["Rendered"].data, ((0, 0), (1, 0), (0, 1))):
+        entry.uv = uv
+    for entry, uv in zip(mesh.uv_layers["Editing"].data, ((10, 10), (11, 10), (10, 11))):
+        entry.uv = uv
+    mesh.uv_layers["Rendered"].active_render = True
+    mesh.uv_layers.active_index = 1
     obj = bpy.data.objects.new("Enscape export", mesh)
     bpy.context.scene.collection.objects.link(obj)
     for existing in bpy.context.selected_objects:
@@ -44,6 +52,8 @@ def run(module_name: str, pixels: bytes, export_output: Path | None) -> None:
     bpy.context.view_layer.objects.active = obj
     material = bpy.data.materials.new("Enscape Export Paint")
     material.use_nodes = True
+    material["skppy_x_scale"] = 5000.0
+    material["skppy_y_scale"] = 10000.0
     mesh.materials.append(material)
     tree = material.node_tree
     bsdf = tree.nodes["Principled BSDF"]
@@ -73,13 +83,20 @@ def run(module_name: str, pixels: bytes, export_output: Path | None) -> None:
         tree.links.new(alpha.outputs[0], bsdf.inputs["Alpha"])
         _add_diffuse_adjustments(tree, texture, bsdf)
         _check_diffuse_variants(builder_type, material, bsdf, texture)
+        _check_uv_scale_variants(builder_type, material, texture)
         exporter = builder_type(bpy.context, export_scope="SELECTED", export_enscape_materials=True)
-        converted = exporter.build().materials[0]
+        model = exporter.build()
+        converted = model.materials[0]
+        pins = model.definitions[0].entities.faces[0].front_uv.pins
+        assert [(pin.texture_position.x, pin.texture_position.y) for pin in pins] == [(0, 0), (5000, 0), (0, 10000)]
+        assert mesh.uv_layers.active.name == "Editing"
         assert (converted.color.r, converted.color.g, converted.color.b) == (128, 64, 0)
         assert (converted.metallic, converted.roughness, converted.specular, converted.ior) == (0.5, 0.25, 0.25, 2)
         assert converted.alpha == 0.75 and converted.texture.data == pixels
         assert converted.texture.brightness == 0.5 and converted.texture.inverted is True
         assert converted.texture_fade == 0.25
+        assert converted.texture.uv_scale == (2, 4)
+        assert (converted.texture.x_scale, converted.texture.y_scale) == (5000, 10000)
         assert (converted.tint_color.r, converted.tint_color.g, converted.tint_color.b) == (128, 255, 64)
         assert exporter.warnings == []
         for format in ("modern", "sketchup_2017"):
@@ -111,6 +128,7 @@ def run(module_name: str, pixels: bytes, export_output: Path | None) -> None:
                 "<TintColor>#80FF40</TintColor>",
                 "<ImageFade>0.25</ImageFade>",
                 "<Brightness>0.5</Brightness><IsInverted>true</IsInverted>",
+                "<UseExplicitTransformation>true</UseExplicitTransformation><Width>63.5</Width><Height>63.5</Height>",
             ):
                 assert expected.encode(encoding) in raw
             if export_output is not None:
@@ -182,6 +200,63 @@ def _check_diffuse_variants(builder_type, material, bsdf, image) -> None:
     assert converted.texture.brightness == 0.25
     assert (converted.tint_color.r, converted.tint_color.g, converted.tint_color.b) == (255, 255, 255)
     tint_node.inputs[2].default_value = (0.2158605, 1, 0.05126946, 1)
+
+
+def _check_uv_scale_variants(builder_type, material, texture) -> None:
+    """Recognize scale-only graphs without relying on importer-created nodes."""
+    tree = material.node_tree
+    coordinate = tree.nodes.new("ShaderNodeTexCoord")
+    multiply = tree.nodes.new("ShaderNodeVectorMath")
+    multiply.operation = "MULTIPLY"
+    multiply.inputs[1].default_value = (2, 4, 1)
+    tree.links.new(coordinate.outputs["UV"], multiply.inputs[0])
+    tree.links.new(multiply.outputs["Vector"], texture.inputs["Vector"])
+    converted = builder_type(bpy.context, export_enscape_materials=True)._material_for(material)
+    assert converted.texture.uv_scale == (2, 4)
+    mapping = tree.nodes.new("ShaderNodeMapping")
+    mapping.vector_type = "POINT"
+    mapping.inputs["Scale"].default_value = (2, 4, 1)
+    tree.links.new(coordinate.outputs["UV"], mapping.inputs["Vector"])
+    tree.links.new(mapping.outputs["Vector"], texture.inputs["Vector"])
+    converted = builder_type(bpy.context, export_enscape_materials=True)._material_for(material)
+    assert converted.texture.uv_scale == (2, 4)
+
+    def reject(expected):
+        try:
+            builder_type(bpy.context, export_enscape_materials=True)._material_for(material)
+        except ValueError as exc:
+            assert expected in str(exc), str(exc)
+        else:
+            raise AssertionError(f"expected UV scale rejection: {expected}")
+
+    for name in ("Location", "Rotation"):
+        mapping.inputs[name].default_value = (1, 0, 0)
+        reject("translation or rotation")
+        mapping.inputs[name].default_value = (0, 0, 0)
+    mapping.vector_type = "TEXTURE"
+    reject("Point mapping")
+    mapping.vector_type = "POINT"
+    for scale in ((-2, 4, 1), (0, 4, 1), (2, 4, 2)):
+        mapping.inputs["Scale"].default_value = scale
+        reject("finite and positive")
+    mapping.inputs["Scale"].default_value = (2, 4, 1)
+    link = tree.links.new(coordinate.outputs["Generated"], mapping.inputs["Scale"])
+    reject("constant mapping Scale")
+    tree.links.remove(link)
+    tree.links.new(multiply.outputs["Vector"], texture.inputs["Vector"])
+    multiply.mute = True
+    reject("unmuted")
+    multiply.mute = False
+    coordinate.from_instancer = True
+    reject("active UV")
+    coordinate.from_instancer = False
+    uv_map = tree.nodes.new("ShaderNodeUVMap")
+    tree.links.new(uv_map.outputs["UV"], multiply.inputs[0])
+    converted = builder_type(bpy.context, export_enscape_materials=True)._material_for(material)
+    assert converted.texture.uv_scale == (2, 4)
+    uv_map.uv_map = "Editing"
+    reject("active UV")
+    uv_map.uv_map = ""
 
 
 def _check_rejections(builder_type, material, bsdf, texture, directory: Path) -> None:

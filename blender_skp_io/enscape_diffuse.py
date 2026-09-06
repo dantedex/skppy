@@ -18,6 +18,7 @@ class DiffuseImage:
     node: Any
     brightness: float = 1.0
     inverted: bool = False
+    uv_scale: tuple[float, float] = (1.0, 1.0)
 
 
 def read_diffuse(

@@ -23,6 +23,10 @@ the project uses semantic versioning while the public API remains pre-1.0.
 
 ### Changed
 
+- Preserve scale-only Blender image mapping in Enscape metadata using positive
+  Vector Math multipliers or Point Mapping scales. Use the render-active UV
+  map instead of the editing selection, without changing either UV data or
+  the native texture coordinate basis.
 - Preserve positive per-image UV multipliers in Python Enscape exports through
   explicit physical texture dimensions, without changing the shared mesh UV
   basis. Reject invalid, overflowing or mirrored explicit dimensions.

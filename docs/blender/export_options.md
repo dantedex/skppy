@@ -113,7 +113,7 @@ emission strength. Materials without nodes use their viewport appearance
 Colors are converted from Blender's linear values to serialized sRGB bytes.
 
 Base-color Image Textures are supported with a static sRGB image,
-flat/repeating mapping, linear interpolation and the active UV coordinates.
+flat/repeating mapping, linear interpolation and render-active UV coordinates.
 Image alpha may connect directly to Principled Alpha, or through multiplication
 by a constant opacity. Transparent image pixels require that alpha connection.
 Packed or file-backed bytes are embedded when **Embedded Textures** is enabled;
@@ -132,9 +132,22 @@ multipliers are combined into brightness, so neutral tints may be represented
 by an equivalent brightness value. Other tint colors use Enscape's 8-bit sRGB
 representation. Image pixels and their separate alpha are left unchanged.
 
+Per-image scale can come from a Vector Math Multiply node with a constant
+second vector, or a Point Mapping node with constant Scale and zero Location
+and Rotation. X/Y multipliers must be positive and Z must be `1`. At most one
+scale node is accepted between the UV source and the image. Its values become
+Enscape's explicit physical dimensions; native texture scales and the shared
+mesh UV basis are not rescaled.
+
+The UV source may be Texture Coordinate's UV output or a UV Map node with its
+name unset. Both use the render-active map, as described in the
+[Blender UV Map manual](https://docs.blender.org/manual/en/5.2/render/shader_nodes/input/uv_map.html).
+Enscape export follows that map even when a different map is selected for
+editing. Named alternate maps and From Instancer coordinates are not supported.
+
 This option is stricter than the default exporter: unsupported base-color
-graphs outside this chain, auxiliary maps, UV
-transforms, linked scalar inputs, alternate surface shaders, volume and
+graphs outside this chain, auxiliary maps, UV translations/rotations/mirroring,
+linked scalar inputs, alternate surface shaders, volume and
 displacement graphs cause an error before replacing the destination. Coat,
 sheen, subsurface, anisotropy, thin film, thin-wall settings and diffuse
 roughness are not translated. RGB values outside `[0, 1]` are rejected; use
