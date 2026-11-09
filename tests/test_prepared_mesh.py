@@ -89,7 +89,15 @@ def test_prepare_mesh_preserves_face_layer_id() -> None:
 
 
 @pytest.mark.parametrize(
-    "slot", ["metallic_texture", "roughness_texture", "normal_texture", "bump_texture", "displacement_texture"]
+    "slot",
+    [
+        "metallic_texture",
+        "roughness_texture",
+        "normal_texture",
+        "bump_texture",
+        "displacement_texture",
+        "opacity_texture",
+    ],
 )
 def test_renderer_only_material_has_scaled_uvs(slot: str) -> None:
     entities, _, material, _ = _textured_quad(front_material_id=7)

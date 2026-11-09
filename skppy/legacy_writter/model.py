@@ -54,7 +54,6 @@ from ..data_structure.model_metadata import (
 )
 from ..data_structure.primitives import Transform, Vector3D
 from ..data_structure.scene_data import PageBackgroundImage, Scene
-from ..writer.vray_materials import replace_vray_dictionaries
 from .._material_validation import validate_material_export, validate_material_names
 from .._atomic_io import atomic_write
 from .envelope import _rendering_options, build_legacy_2017_prefix
@@ -605,10 +604,9 @@ class _LegacyGeometryEncoder:
 class _LegacyModelEncoder(_LegacyGeometryEncoder):
     """Encode the complete root component and its shared resource registries."""
 
-    def __init__(self, model: Model, entities: Entities, *, export_vray_materials: bool = False) -> None:
+    def __init__(self, model: Model, entities: Entities) -> None:
         super().__init__(entities, first_archive_index=9)
         self.model = model
-        self.export_vray_materials = export_vray_materials
         self.fonts = model.fonts or _default_fonts()
         self.definitions_by_id = {definition.id: definition for definition in model.definitions}
         self.definition_indices: dict[int, int] = {}
@@ -957,8 +955,6 @@ class _LegacyModelEncoder(_LegacyGeometryEncoder):
             object_index = self._write_new_object("CMaterial", 12)
             self.material_indices[material.id] = object_index
             dictionaries = self.model.attribute_dictionaries_by_object_id.get(material.id, ())
-            if self.export_vray_materials:
-                dictionaries = replace_vray_dictionaries(dictionaries, material, target="sketchup_2017")
             self._write_material(
                 material,
                 dictionaries=dictionaries,
@@ -1164,25 +1160,21 @@ class _LegacyModelEncoder(_LegacyGeometryEncoder):
         self.data += bytes((material.color.r, material.color.g, material.color.b, material.color.a))
 
 
-def build_legacy_2017_model(model: Model, *, export_vray_materials: bool = False) -> bytes:
+def build_legacy_2017_model(model: Model) -> bytes:
     """Build a genuine SketchUp Make 2017 stream for root geometry."""
     validate_material_names(model.materials)
     _validate_legacy_geometry(model)
-    encoder = _LegacyModelEncoder(model, model.entities, export_vray_materials=export_vray_materials)
+    encoder = _LegacyModelEncoder(model, model.entities)
     root = encoder.encode()
     prefix = build_legacy_2017_prefix(model, encoder.next_persistent_id)
     return prefix + root
 
 
-def write_legacy_2017_model(
-    model: Model,
-    filepath: str | Path,
-    *,
-    export_vray_materials: bool = False,
-) -> Path:
+def write_legacy_2017_model(model: Model, filepath: str | Path) -> Path:
     """Write a model as a pre-ZIP SketchUp Make 2017 file."""
     path = Path(filepath)
-    atomic_write(path, build_legacy_2017_model(model, export_vray_materials=export_vray_materials))
+    encoded = build_legacy_2017_model(model)
+    atomic_write(path, encoded)
     return path
 
 

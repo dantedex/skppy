@@ -21,7 +21,7 @@ Example
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Optional
 
 
@@ -55,6 +55,9 @@ class Texture:
         Source renderer's texture multiplier. Default 1.0.
     inverted : bool, optional
         Whether the source renderer inverts the texture values.
+    uv_scale : tuple[float, float], optional
+        Per-image multipliers applied to the shared mesh UVs. The physical
+        ``x_scale``/``y_scale`` remain the basis used to generate those UVs.
 
     Examples
     --------
@@ -71,8 +74,11 @@ class Texture:
     data: Optional[bytes] = None
     brightness: float = 1.0
     inverted: bool = False
+    uv_scale: tuple[float, float] = field(default=(1.0, 1.0), kw_only=True)
 
     def __post_init__(self) -> None:
         """Keep newly constructed textures safe for immediate UV evaluation."""
         self.x_scale = normalize_texture_scale(self.x_scale)
         self.y_scale = normalize_texture_scale(self.y_scale)
+        if len(self.uv_scale) != 2 or not all(math.isfinite(value) and value != 0 for value in self.uv_scale):
+            raise ValueError("uv_scale must contain two finite, non-zero multipliers")

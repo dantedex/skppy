@@ -94,7 +94,7 @@ class Material:
         Relief interpretation: ``NONE``, ``BUMP``, ``NORMAL``, or
         ``DISPLACEMENT``.
     bump_strength : float, optional
-        Height/bump strength. Default 0.0.
+        Signed height/bump strength. Negative values reverse the relief. Default 0.0.
     normal_scale : float, optional
         Tangent-space normal map strength. Default 1.0.
     displacement_scale : float, optional
@@ -109,6 +109,15 @@ class Material:
         Tangent-space normal map.
     displacement_texture : Texture or None, optional
         Grayscale displacement/height map.
+    tint_color : Color, optional
+        Multiplicative diffuse texture tint. Default white.
+    texture_fade : float, optional
+        Diffuse image influence: 0 uses the base color, 1 uses the tinted image.
+    transmission : float, optional
+        Fraction of surface light transmitted/refracted instead of diffuse shading.
+        This is independent of cutout opacity. Default 0.0.
+    opacity_texture : Texture or None, optional
+        Grayscale opacity mask multiplied by ``alpha``; overrides diffuse image alpha.
 
     Examples
     --------
@@ -140,3 +149,7 @@ class Material:
     bump_texture: Optional["Texture"] = None
     normal_texture: Optional["Texture"] = None
     displacement_texture: Optional["Texture"] = None
+    tint_color: Color = field(default_factory=lambda: Color(255, 255, 255), kw_only=True)
+    texture_fade: float = field(default=1.0, kw_only=True)
+    transmission: float = field(default=0.0, kw_only=True)
+    opacity_texture: Optional["Texture"] = field(default=None, kw_only=True)

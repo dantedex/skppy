@@ -3,7 +3,7 @@
 
 from __future__ import annotations
 
-from bpy.props import BoolProperty, EnumProperty, FloatProperty, StringProperty
+from bpy.props import BoolProperty, EnumProperty, FloatProperty, IntProperty, StringProperty
 from bpy.types import Operator
 from bpy_extras.io_utils import ExportHelper
 
@@ -60,15 +60,29 @@ class EXPORT_OT_skp(Operator, ExportHelper):
         description="Export material colors, opacity, metallic, and roughness",
         default=True,
     )
-    export_vray_materials: BoolProperty(
-        name="V-Ray Materials",
-        description="Generate V-Ray materials from Principled BSDF values while retaining the SketchUp appearance",
-        default=False,
-    )
     export_textures: BoolProperty(
         name="Embedded Textures",
         description="Embed packed or file-backed images linked to Base Color",
         default=True,
+    )
+    bake_materials: BoolProperty(
+        name="Bake Procedural Color and Alpha",
+        description="Bake supported color/opacity graphs with CPU Cycles; requires non-overlapping UVs inside 0-1",
+        default=False,
+    )
+    bake_resolution: IntProperty(
+        name="Bake Resolution",
+        description="Width and height of each per-object baked texture; higher values increase export time and memory",
+        default=1024,
+        min=16,
+        max=4096,
+    )
+    bake_margin: IntProperty(
+        name="Bake Margin",
+        description="Pixel padding around baked UV islands",
+        default=16,
+        min=0,
+        max=4096,
     )
     export_uvs: BoolProperty(
         name="UV Coordinates",
@@ -115,9 +129,15 @@ class EXPORT_OT_skp(Operator, ExportHelper):
         appearance.prop(self, "export_materials")
         column = appearance.column()
         column.enabled = self.export_materials
-        column.prop(self, "export_vray_materials")
         column.prop(self, "export_textures")
         column.prop(self, "export_uvs")
+        bake = column.column()
+        bake.enabled = self.export_textures and self.export_uvs
+        bake.prop(self, "bake_materials")
+        settings = bake.column()
+        settings.enabled = self.bake_materials
+        settings.prop(self, "bake_resolution")
+        settings.prop(self, "bake_margin")
 
         metadata = layout.box()
         metadata.label(text="Organization and Metadata")
@@ -143,12 +163,14 @@ class EXPORT_OT_skp(Operator, ExportHelper):
                 export_text=self.export_text and self.output_format == "modern",
                 export_custom_properties=self.export_custom_properties and self.output_format == "modern",
                 merge_coplanar_faces=self.merge_coplanar_faces,
+                bake_materials=self.bake_materials,
+                bake_resolution=self.bake_resolution,
+                bake_margin=self.bake_margin,
             )
             model = builder.build()
             model.save(
                 self.filepath,
                 format=self.output_format,
-                export_vray_materials=self.export_materials and self.export_vray_materials,
             )
         except Exception as exc:
             self.report({"ERROR"}, f"Failed to export .skp file: {exc}")
@@ -161,6 +183,8 @@ class EXPORT_OT_skp(Operator, ExportHelper):
         )
         if warning_count:
             summary += f"; {warning_count} conversion warning(s)"
+            for warning in builder.warnings:
+                print(f"SKP export warning: {warning}")
             for warning in builder.warnings[:3]:
                 self.report({"WARNING"}, warning)
         self.report({"INFO"}, summary)

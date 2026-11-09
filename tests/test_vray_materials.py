@@ -252,7 +252,9 @@ def test_modern_material_import_prefers_sketchup_unless_vray_is_enabled() -> Non
 
 def test_legacy_material_import_applies_vray_only_when_enabled(monkeypatch) -> None:
     applied_to = []
-    monkeypatch.setattr("skppy.parser_legacy.parser.apply_vray_materials", applied_to.append)
+    monkeypatch.setattr(
+        "skppy.parser_legacy.parser.apply_renderer_materials", lambda model, **kwargs: applied_to.append(model)
+    )
 
     sketchup = parse_legacy_bytes(legacy_v8_bytes())
     vray = parse_legacy_bytes(legacy_v8_bytes(), import_vray_materials=True)

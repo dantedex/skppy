@@ -60,7 +60,86 @@ def test_safely_defaults_invalid_enscape_fields(emission_color: str, relief_type
         (0.2, 0.3, 1.0, 1.5)
     )
     assert material.emission_color == skppy.Color(1, 2, 3)
-    assert (material.emission_strength, material.bump_strength, material.normal_scale) == pytest.approx((0, 0, 0))
+    assert (material.emission_strength, material.bump_strength, material.normal_scale) == pytest.approx((0, -2, 0))
     assert material.bump_map_type == ("BUMP" if relief_type == "BUMP" else "NONE")
     assert material.bump_texture is None
     assert material.roughness_texture is None
+
+
+@pytest.mark.parametrize("has_texture", [False, True])
+def test_sketchup_source_uses_host_image_instead_of_stale_filename(has_texture: bool) -> None:
+    metadata = """<SketchupMaterial><DiffuseTexture><Source>SKETCHUP</Source><Filepath>stale.png</Filepath>
+      <Brightness>0.8</Brightness><IsInverted>true</IsInverted></DiffuseTexture>
+      <RoughnessTexture><Source>SKETCHUP</Source></RoughnessTexture></SketchupMaterial>"""
+    original = skppy.Texture(filename="actual.png", data=b"host pixels", x_scale=2, y_scale=3)
+    material = skppy.Material(has_texture=has_texture, texture=original if has_texture else None)
+
+    def reject_external_lookup(*args):
+        raise AssertionError("SKETCHUP source must not resolve a filename")
+
+    assert apply_enscape_xml(
+        material, _material_element(metadata), parse_xml=_parse_xml, resolve_texture=reject_external_lookup
+    )
+
+    if has_texture:
+        assert material.texture is not original
+        assert material.texture.data == material.roughness_texture.data == b"host pixels"
+        assert material.texture.filename == "actual.png"
+        assert material.texture.brightness == pytest.approx(0.8)
+        assert material.texture.inverted
+        assert (material.roughness_texture.x_scale, material.roughness_texture.y_scale) == (2, 3)
+        assert original.brightness == material.roughness_texture.brightness == 1
+        assert not original.inverted and not material.roughness_texture.inverted
+    else:
+        assert material.texture is material.roughness_texture is None
+
+
+@pytest.mark.parametrize(("fade", "expected"), [("0", 0), ("0.845", 0.845), ("2", 1), ("-1", 0), ("nan", 1)])
+def test_imports_tint_and_bounds_image_fade(fade: str, expected: float) -> None:
+    metadata = f"""<SketchupMaterial Version="5"><TintColor>#B2B2B2</TintColor><ImageFade>{fade}</ImageFade>
+      </SketchupMaterial>"""
+    material = skppy.Material()
+
+    assert apply_enscape_xml(
+        material, _material_element(metadata), parse_xml=_parse_xml, resolve_texture=_resolve_texture
+    )
+
+    assert material.tint_color == skppy.Color(178, 178, 178)
+    assert material.texture_fade == pytest.approx(expected)
+
+
+@pytest.mark.parametrize(
+    ("type_fields", "unsupported_type", "transmission", "alpha"),
+    [
+        ("", None, 0, 0.25),
+        ("<Type>GENERIC</Type>", None, 0, 0.25),
+        ("<Type>SELF_ILLUMINATED</Type>", None, 0, 0.25),
+        ("<Type>GLASS</Type>", None, 0.75, 1),
+        ("<Type>UNSUPPORTED_TEST_TYPE</Type>", "UNSUPPORTED_TEST_TYPE", 0, 0.25),
+        ("<Type>GLASS</Type><TypeV5>UNSUPPORTED_TEST_TYPE</TypeV5>", "UNSUPPORTED_TEST_TYPE", 0, 0.25),
+        ("<Type>UNSUPPORTED_TEST_TYPE</Type><TypeV5>GENERIC</TypeV5>", None, 0, 0.25),
+        ("<Type>UNSUPPORTED_TEST_TYPE</Type><TypeV5>GLASS</TypeV5>", None, 0.75, 1),
+        ("<Type>UNSUPPORTED_TEST_TYPE</Type><TypeV5> </TypeV5>", "UNSUPPORTED_TEST_TYPE", 0, 0.25),
+    ],
+)
+def test_material_type_warning_preserves_supported_properties(
+    type_fields: str, unsupported_type: str | None, transmission: float, alpha: float, caplog: pytest.LogCaptureFixture
+) -> None:
+    metadata = f"""<SketchupMaterial>{type_fields}<Opacity>0.25</Opacity><Roughness>0.75</Roughness>
+      <RoughnessTexture><Filepath>roughness.png</Filepath></RoughnessTexture></SketchupMaterial>"""
+    material = skppy.Material(name="Type boundary")
+
+    assert apply_enscape_xml(
+        material, _material_element(metadata), parse_xml=_parse_xml, resolve_texture=_resolve_texture
+    )
+
+    assert (material.transmission, material.alpha, material.roughness) == (transmission, alpha, 0.75)
+    assert material.roughness_texture is not None
+    assert material.roughness_texture.filename == "roughness.png"
+    assert caplog.messages == (
+        [
+            f"Unsupported Enscape material type {unsupported_type!r} for 'Type boundary'; importing supported properties only"
+        ]
+        if unsupported_type
+        else []
+    )

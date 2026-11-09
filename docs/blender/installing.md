@@ -10,7 +10,14 @@ required. For library-only use, see [Installing skppy](../installing.md).
 
 ---
 
-## Step 1 - Build the distribution ZIP
+## Step 1 - Get the distribution ZIP
+
+Download `blender_skp_io-<version>.zip` from the
+[project releases](https://github.com/dantedex/skppy/releases). Use the addon
+ZIP, not GitHub's source archive or the Python wheel. No local build is needed
+for a released addon.
+
+### Building from source
 
 The build script packages the addon and its bundled `skppy` copy into a
 single ZIP file:
@@ -38,10 +45,11 @@ For development versions, bundled `skppy` keeps the PEP 440 version such as
 
 1. Open Blender (>= 4.2.0).
 2. Go to **Edit -> Preferences -> Add-ons**.
-3. Click **Install...** (top-right button).
-4. Navigate and select `dist/blender_skp_io-<version>.zip`.
-5. Enable the addon by checking the box next to
-   **Import-Export: SketchUp IO (.skp)**.
+3. Open the menu in the top-right corner and choose **Install from Disk...**.
+   This is the Blender 4.2+ extension workflow; wording/layout can vary by version.
+4. Select the downloaded or locally built `blender_skp_io-<version>.zip`.
+5. If it was not enabled automatically, search for **SketchUp IO** and enable
+   the extension.
 
 > **Tip:** If you update the addon, disable and remove the old version first,
 > then reinstall the new ZIP.
@@ -50,7 +58,7 @@ For development versions, bundled `skppy` keeps the PEP 440 version such as
 
 ## Step 3 - Verify
 
-Open **File -> Import -> SketchUp (.skp)**. The file browser should open with
+Open **File -> Import -> SketchUp (.skp/.skm)**. The file browser should open with
 the import option panel on the right side.
 
 ---
@@ -63,7 +71,13 @@ the import option panel on the right side.
 
 ---
 
-## Development mode (manual install)
+## Development mode
+
+Prefer rebuilding the ZIP and reinstalling it through **Install from Disk...**
+when testing the self-contained extension. The source checkout does not include
+its generated bundled `skppy` copy.
+
+### Manual legacy-addon layout
 
 For development without rebuilding the ZIP on every change:
 
@@ -76,6 +90,6 @@ For development without rebuilding the ZIP on every change:
    resolves inside Blender.
 4. Enable the addon in Preferences.
 
-Changes to Python files take effect after reloading scripts
-(**Edit -> Preferences -> Add-ons -> scroll to bottom -> "Reload Scripts"** or
-press **F3** and search for "Reload Scripts").
+Restart Blender after updating the files so registered classes and imported
+modules are reloaded consistently. This manual layout is a development
+convenience, not the packaged-extension installation path.

@@ -12,6 +12,15 @@ import bpy
 import numpy as np
 
 from .skppy._atomic_io import atomic_write
+from .skppy.data_structure.images import Texture
+from .skppy.data_structure.materials import Color, Material
+
+
+def _linear_color(color: Color) -> tuple[float, float, float, float]:
+    """Convert serialized sRGB bytes to Blender's scene-linear socket values."""
+    channels = [channel / 255.0 for channel in (color.r, color.g, color.b)]
+    red, green, blue = [value / 12.92 if value <= 0.04045 else ((value + 0.055) / 1.055) ** 2.4 for value in channels]
+    return red, green, blue, 1.0
 
 
 class BlenderMaterialBuilder:
@@ -26,29 +35,23 @@ class BlenderMaterialBuilder:
         bsdf = bl_mat.node_tree.nodes.get("Principled BSDF")
         has_texture_alpha = False
         if bsdf:
-            r = mat.color.r / 255.0
-            g = mat.color.g / 255.0
-            b = mat.color.b / 255.0
-            cls._set_principled_input(bsdf, "Base Color", (r, g, b, 1.0))
+            cls._set_principled_input(bsdf, "Base Color", _linear_color(mat.color))
             cls._set_principled_input(bsdf, "Alpha", mat.alpha)
             cls._set_principled_input(bsdf, "Metallic", mat.metallic)
             cls._set_principled_input(bsdf, "Roughness", mat.roughness)
             cls._set_principled_input(bsdf, "IOR", mat.ior)
+            cls._set_first_principled_input(bsdf, ("Transmission Weight", "Transmission"), mat.transmission)
             cls._set_first_principled_input(bsdf, ("IOR Level", "Specular IOR Level"), mat.specular)
-            emission = (
-                mat.emission_color.r / 255.0,
-                mat.emission_color.g / 255.0,
-                mat.emission_color.b / 255.0,
-                1.0,
-            )
+            emission = _linear_color(mat.emission_color)
             cls._set_first_principled_input(bsdf, ("Emission Color", "Emission"), emission)
             cls._set_principled_input(bsdf, "Emission Strength", mat.emission_strength)
 
             if mat.has_texture and mat.texture and mat.texture.data:
-                has_texture_alpha = cls._attach_texture(bl_mat, mat.texture, alpha_factor=mat.alpha)
+                has_texture_alpha = cls._attach_texture(bl_mat, mat)
                 bl_mat["skppy_x_scale"] = mat.texture.x_scale
                 bl_mat["skppy_y_scale"] = mat.texture.y_scale
             cls._attach_pbr_textures(bl_mat, mat, bsdf)
+            has_texture_alpha = cls._attach_opacity_texture(bl_mat, mat, bsdf) or has_texture_alpha
 
         cls._store_pbr_metadata(bl_mat, mat)
 
@@ -60,31 +63,84 @@ class BlenderMaterialBuilder:
     def _attach_texture(
         cls,
         bl_mat: bpy.types.Material,
-        texture,
-        alpha_factor: float = 1.0,
+        material: Material,
     ) -> bool:
         """Load texture image data into a Blender image texture node.
 
         Returns True when the loaded image alpha channel contains transparency.
         """
+        texture = material.texture
+        assert texture is not None  # The caller checks the embedded image slot.
         image = cls._load_texture_image(texture)
-        tex_node = cls._new_image_texture_node(bl_mat, image, location=(-280, 200))
+        tex_node = cls._new_image_texture_node(bl_mat, image, location=(-280, 200), uv_scale=texture.uv_scale)
 
         tree = bl_mat.node_tree
         nodes = tree.nodes
         links = tree.links
         bsdf = nodes.get("Principled BSDF")
         if bsdf:
-            cls._link_principled_input(links, tex_node.outputs.get("Color"), bsdf, "Base Color")
+            color = cls._adjust_texture_color(bl_mat, tex_node.outputs["Color"], texture)
+            color = cls._tint_and_fade(bl_mat, color, material)
+            cls._link_principled_input(links, color, bsdf, "Base Color")
             cls._link_texture_alpha(
                 nodes,
                 links,
                 tex_node.outputs.get("Alpha"),
                 bsdf,
-                alpha_factor,
+                material.alpha,
             )
 
         return cls._image_uses_alpha(image)
+
+    @staticmethod
+    def _adjust_texture_color(
+        bl_mat: bpy.types.Material, output: bpy.types.NodeSocket, texture: Texture
+    ) -> bpy.types.NodeSocket:
+        """Apply renderer color adjustments without modifying the texture alpha."""
+        nodes = bl_mat.node_tree.nodes
+        links = bl_mat.node_tree.links
+        if texture.inverted:
+            invert = nodes.new("ShaderNodeInvert")
+            invert.label = "SKP Color Invert"
+            invert.location = (-40, 300)
+            invert.inputs["Fac"].default_value = 1.0
+            links.new(output, invert.inputs["Color"])
+            output = invert.outputs["Color"]
+        if texture.brightness != 1.0:
+            multiply = nodes.new("ShaderNodeMixRGB")
+            multiply.blend_type = "MULTIPLY"
+            multiply.label = "SKP Color Brightness"
+            multiply.location = (160, 300)
+            multiply.inputs[0].default_value = 1.0
+            multiply.inputs[2].default_value = (texture.brightness,) * 3 + (1.0,)
+            links.new(output, multiply.inputs[1])
+            output = multiply.outputs["Color"]
+        return output
+
+    @staticmethod
+    def _tint_and_fade(
+        bl_mat: bpy.types.Material, output: bpy.types.NodeSocket, material: Material
+    ) -> bpy.types.NodeSocket:
+        """Blend a tinted diffuse image with the material's untextured color."""
+        nodes = bl_mat.node_tree.nodes
+        links = bl_mat.node_tree.links
+        if material.tint_color != Color(255, 255, 255):
+            tint = nodes.new("ShaderNodeMixRGB")
+            tint.blend_type = "MULTIPLY"
+            tint.label = "SKP Texture Tint"
+            tint.inputs[0].default_value = 1.0
+            tint.inputs[2].default_value = _linear_color(material.tint_color)
+            links.new(output, tint.inputs[1])
+            output = tint.outputs["Color"]
+        if material.texture_fade != 1.0:
+            fade = nodes.new("ShaderNodeMixRGB")
+            fade.blend_type = "MIX"
+            fade.label = "SKP Image Fade"
+            fade.inputs[0].default_value = material.texture_fade
+            fade.inputs[1].default_value = _linear_color(material.color)
+            links.new(output, fade.inputs[2])
+            output = fade.outputs["Color"]
+        return output
 
     @staticmethod
     def _load_texture_image(texture, *, non_color: bool = False) -> "bpy.types.Image":
@@ -128,7 +184,9 @@ class BlenderMaterialBuilder:
         return image
 
     @staticmethod
-    def _new_image_texture_node(bl_mat, image, *, location: tuple[int, int]):
+    def _new_image_texture_node(
+        bl_mat, image, *, location: tuple[int, int], uv_scale: tuple[float, float] = (1.0, 1.0)
+    ):
         """Create a UV-driven image node for a packed image."""
         tree = bl_mat.node_tree
         nodes = tree.nodes
@@ -140,7 +198,15 @@ class BlenderMaterialBuilder:
         tex_node.image = image
         tex_node.location = location
 
-        links.new(tex_coord.outputs["UV"], tex_node.inputs["Vector"])
+        vector = tex_coord.outputs["UV"]
+        if uv_scale != (1.0, 1.0):
+            mapping = nodes.new("ShaderNodeVectorMath")
+            mapping.operation = "MULTIPLY"
+            mapping.label = "SKP Texture Size"
+            mapping.inputs[1].default_value = (*uv_scale, 1.0)
+            links.new(vector, mapping.inputs[0])
+            vector = mapping.outputs["Vector"]
+        links.new(vector, tex_node.inputs["Vector"])
         return tex_node
 
     @classmethod
@@ -164,7 +230,8 @@ class BlenderMaterialBuilder:
             normal_map.label = "SKP Normal"
             normal_map.location = (-40, -520)
             normal_map.inputs["Strength"].default_value = mat.normal_scale
-            links.new(tex_node.outputs["Color"], normal_map.inputs["Color"])
+            color = cls._adjust_texture_color(bl_mat, tex_node.outputs["Color"], mat.normal_texture)
+            links.new(color, normal_map.inputs["Color"])
             normal_output = normal_map.outputs["Normal"]
 
         if mat.bump_texture is not None and mat.bump_texture.data is not None:
@@ -172,7 +239,8 @@ class BlenderMaterialBuilder:
             bump = nodes.new("ShaderNodeBump")
             bump.label = "SKP Bump"
             bump.location = (-40, -680)
-            bump.inputs["Strength"].default_value = mat.bump_strength
+            bump.inputs["Strength"].default_value = abs(mat.bump_strength)
+            bump.invert = mat.bump_strength < 0.0
             links.new(height, bump.inputs["Height"])
             if normal_output is not None:
                 links.new(normal_output, bump.inputs["Normal"])
@@ -217,9 +285,19 @@ class BlenderMaterialBuilder:
         return output
 
     @classmethod
+    def _attach_opacity_texture(cls, bl_mat, material: Material, bsdf) -> bool:
+        """Use an available grayscale mask as opacity, falling back when missing."""
+        texture = material.opacity_texture
+        if texture is None or texture.data is None:
+            return False
+        opacity = cls._attach_scalar_texture(bl_mat, texture, location=(-280, 520))
+        cls._link_texture_alpha(bl_mat.node_tree.nodes, bl_mat.node_tree.links, opacity, bsdf, material.alpha)
+        return True
+
+    @classmethod
     def _pbr_image_node(cls, bl_mat, texture, *, location: tuple[int, int]):
         image = cls._load_texture_image(texture, non_color=True)
-        tex_node = cls._new_image_texture_node(bl_mat, image, location=location)
+        tex_node = cls._new_image_texture_node(bl_mat, image, location=location, uv_scale=texture.uv_scale)
         tex_node.label = f"SKP {os.path.basename(texture.filename)}"
         return tex_node
 
@@ -227,6 +305,9 @@ class BlenderMaterialBuilder:
     def _store_pbr_metadata(bl_mat, mat) -> None:
         """Keep source PBR parameters and missing map references inspectable."""
         values = {
+            "skppy_transmission": mat.transmission,
+            "skppy_texture_fade": mat.texture_fade,
+            "skppy_tint_color": (mat.tint_color.r, mat.tint_color.g, mat.tint_color.b),
             "skppy_specular": mat.specular,
             "skppy_ior": mat.ior,
             "skppy_emission_strength": mat.emission_strength,
@@ -238,6 +319,7 @@ class BlenderMaterialBuilder:
         for key, value in values.items():
             bl_mat[key] = value
         for slot_name in (
+            "opacity_texture",
             "metallic_texture",
             "roughness_texture",
             "bump_texture",

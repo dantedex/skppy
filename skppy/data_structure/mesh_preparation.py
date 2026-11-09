@@ -234,6 +234,7 @@ def _face_uvs(geometry: _FaceGeometry, positions: list[Position3D]) -> Optional[
         material.normal_texture,
         material.bump_texture,
         material.displacement_texture,
+        material.opacity_texture,
     )
     texture = next((texture for texture in textures if texture is not None), None)
     if texture is None:

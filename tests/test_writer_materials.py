@@ -98,54 +98,6 @@ def test_material_xml_preserves_color_opacity_and_pbr_factors() -> None:
     assert pbr.findtext(f"{{{_NAMESPACE}}}roughnessFactor") == "0.125"
 
 
-def test_modern_vray_option_appends_raw_material_xml_metadata() -> None:
-    material = Material(id=1, name="Paint", color=Color(255, 0, 0), metallic=0.5, roughness=0.25)
-
-    sketchup_xml = encode_material_xml(material)
-    vray_xml = encode_material_xml(material, export_vray_materials=True)
-
-    assert b"VRayInfo" not in sketchup_xml
-    assert b'xmlns:n0="http://sketchup.google.com/schemas/1.0/types"' in vray_xml
-    assert b'<n0:AttributeDictionary name="VRayInfo" count="4">' in vray_xml
-    assert b'<n0:Attribute key="version" type="4">72002</n0:Attribute>' in vray_xml
-    assert b'<n0:AttributeDictionary name="VRayPlugins" count="2">' in vray_xml
-    assert b'"class":"BRDFVRayMtl"' in vray_xml
-    assert b'"diffuse":"Color(1,0,0)"' in vray_xml
-    assert b'"metalness":"0.5"' in vray_xml
-    assert b'"reflect_glossiness":"0.25"' in vray_xml
-
-
-def test_modern_container_threads_vray_option_to_material_entries() -> None:
-    model = new_model()
-    model.add_material("Paint", color=Color(20, 40, 60))
-
-    raw = build_model_container(model, export_vray_materials=True)
-    with zipfile.ZipFile(io.BytesIO(raw)) as archive:
-        material_xml = archive.read("materials/Paint/material.xml")
-
-    assert b'<n0:AttributeDictionary name="VRayInfo" count="4">' in material_xml
-
-
-def test_modern_vray_texture_graph_matches_raw_plugin_references() -> None:
-    material = Material(
-        id=1,
-        name="Tile",
-        color=Color(127, 127, 127),
-        has_texture=True,
-        texture=Texture(filename="tile.png", data=_one_pixel_png()),
-    )
-
-    material_xml = encode_material_xml(material, export_vray_materials=True)
-
-    assert b'"diffuse":"/Tile/VRay Mtl/Bitmap"' in material_xml
-    assert b'"class":"TexBitmap"' in material_xml
-    assert b'"bitmap":"/Tile/VRay Mtl/Bitmap/Bitmap"' in material_xml
-    assert b'"class":"BitmapBuffer"' in material_xml
-    assert b'"file":"tile.png"' in material_xml
-    assert b'"class":"UVWGenChannel"' in material_xml
-    assert b'"uvw_channel":"1"' in material_xml
-
-
 def test_materialized_face_matches_raw_remapped_reference() -> None:
     """Keep face and material IDs coherent after global file-ID allocation."""
     model = new_model()

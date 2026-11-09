@@ -47,8 +47,8 @@ Unsupported legacy-only state is rejected instead of producing a lossy file.
 
 Material export supports base color, opacity, metallic/roughness factors, and
 an unadjusted base-color image. Additional renderer properties (including IOR,
-emission and auxiliary maps) raise `ValueError` when set to unsupported values,
-even with V-Ray export enabled. Material names must be unique. Resolve these
+emission and auxiliary maps) raise `ValueError` when set to unsupported values.
+Material names must be unique. Resolve these
 errors explicitly rather than assuming that everything imported can be saved.
 
 Saving replaces the destination only after serialization and writing complete.
@@ -240,16 +240,10 @@ model.save("output.skp")
 
 # Genuine pre-ZIP SketchUp Make 2017 geometry:
 model.save("output-2017.skp", format="sketchup_2017")
-
-# Add V-Ray PBR metadata while retaining the normal SketchUp material:
-model.save("output-vray.skp", export_vray_materials=True)
 ```
 
-`export_vray_materials` defaults to `False`. When enabled, it maps material
-colour, opacity, metallic, and roughness into a V-Ray material graph for either
-output format. Native SketchUp appearance and PBR fields remain present as a
-fallback. Embedded base-colour images are connected to a V-Ray bitmap graph
-using UV channel 1 while remaining available as native SketchUp textures.
+Enscape and V-Ray support is import-only. Renderer-specific export is deferred
+to a future feature; both output formats write native SketchUp materials.
 
 The 2017 writer preserves polygon and edge geometry, face holes, edge flags,
 reusable component definitions, and transformed component placements in the

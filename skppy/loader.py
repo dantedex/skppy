@@ -156,7 +156,7 @@ def _load(path: str, *, import_vray_materials: bool, limits: LoadLimits) -> Mode
                 logger.info("Starting to parse pre-ZIP CArchive file: %s", path)
                 data = read_bounded(fh, limits.max_entry_bytes, path)
                 check_cancelled()
-                return parse_legacy_bytes(data, import_vray_materials=import_vray_materials)
+                return parse_legacy_bytes(data, import_vray_materials=import_vray_materials, limits=limits)
 
             fh.seek(0)
             logger.info("Starting to parse file: %s", path)
@@ -170,7 +170,7 @@ def _load(path: str, *, import_vray_materials: bool, limits: LoadLimits) -> Mode
                 logger.info("Starting to parse legacy CArchive with appended ZIP: %s", path)
                 data = read_bounded(fh, limits.max_entry_bytes, path)
                 check_cancelled()
-                return parse_legacy_bytes(data, import_vray_materials=import_vray_materials)
+                return parse_legacy_bytes(data, import_vray_materials=import_vray_materials, limits=limits)
             logger.info(
                 "Header parsed: product=%r, version=%r, zip_offset=%s",
                 header.product_name,

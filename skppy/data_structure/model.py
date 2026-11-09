@@ -401,7 +401,6 @@ class Model:
         *,
         header: Optional["SkpHeader"] = None,
         format: Literal["modern", "sketchup_2017"] = "modern",
-        export_vray_materials: bool = False,
     ) -> Path:
         """
         Write this model to a SketchUp .skp file.
@@ -414,8 +413,6 @@ class Model:
             Explicit modern VFF header.
         format : {"modern", "sketchup_2017"}, optional
             Output container format.
-        export_vray_materials : bool, optional
-            Generate V-Ray material metadata from public material values.
 
         Returns
         -------
@@ -429,7 +426,6 @@ class Model:
             filepath,
             header=header,
             format=format,
-            export_vray_materials=export_vray_materials,
         )
 
     def dump_zip(self, output_dir: str) -> Path:

@@ -7,14 +7,17 @@ import math
 import os
 import re
 from collections.abc import Iterable
-from pathlib import Path
+from dataclasses import replace
+
 from typing import Any
 
-import bpy
+
 import numpy as np
 from mathutils import Matrix, Vector
 
 from . import skppy
+from .export_materials import SurfaceState, analyze_material, direct_image_bytes
+from .material_baker import bake_material
 from .skppy.coplanar import CoplanarRegion, PolygonBoundary, merge_coplanar_polygons
 
 _GEOMETRY_TYPES = {"MESH", "CURVE", "SURFACE", "META"}
@@ -42,6 +45,9 @@ class BlenderModelBuilder:
         export_text: bool = True,
         export_custom_properties: bool = True,
         merge_coplanar_faces: bool = True,
+        bake_materials: bool = False,
+        bake_resolution: int = 1024,
+        bake_margin: int = 16,
     ) -> None:
         self.context = context
         self.export_scope = export_scope
@@ -55,12 +61,17 @@ class BlenderModelBuilder:
         self.export_text = export_text
         self.export_custom_properties = export_custom_properties
         self.merge_coplanar_faces = merge_coplanar_faces
+        self.bake_materials = bake_materials
+        self.bake_resolution = bake_resolution
+        self.bake_margin = bake_margin
         self.model = skppy.Model.new()
         self.warnings: list[str] = []
         self.exported_objects = 0
         self.ignored_objects = 0
 
-        self._material_map: dict[int, skppy.Material] = {}
+        self._material_map: dict[tuple[Any, ...], skppy.Material] = {}
+        self._baked_material_ids: set[int] = set()
+        self._material_states: dict[int, SurfaceState] = {}
         self._layer_map: dict[str, skppy.Layer] = {}
         self._definition_map: dict[tuple[Any, ...], skppy.ComponentDefinition] = {}
         self._collection_definitions: dict[int, skppy.ComponentDefinition] = {}
@@ -77,8 +88,6 @@ class BlenderModelBuilder:
         if self.export_layers:
             for obj in objects:
                 self._layer_for_object(obj)
-        if self.export_materials:
-            self._build_materials(objects)
 
         for obj in objects:
             self._export_object(obj)
@@ -110,128 +119,103 @@ class BlenderModelBuilder:
             obj for obj in scene_objects if obj.visible_get(view_layer=self.context.view_layer) and not obj.hide_render
         ]
 
-    def _build_materials(self, objects: Iterable[Any]) -> None:
-        for obj in objects:
-            for material in self._object_materials(obj):
-                self._material_for(material)
-
-    def _object_materials(self, obj: Any) -> Iterable[Any]:
-        """Yield non-null materials reachable from an export object."""
-        for slot in getattr(obj, "material_slots", ()):
-            if slot.material is not None:
-                yield slot.material
-        if obj.type == "FONT" and getattr(obj.data, "materials", None):
-            yield from (material for material in obj.data.materials if material is not None)
-        if obj.type == "EMPTY" and getattr(obj, "instance_collection", None):
-            for member in self._collection_objects(obj.instance_collection):
-                for slot in getattr(member, "material_slots", ()):
-                    if slot.material is not None:
-                        yield slot.material
-
-    def _material_for(self, material: Any) -> skppy.Material:
+    def _surface_state(self, material: Any, mesh: Any | None = None) -> SurfaceState:
         key = material.as_pointer()
+        if key not in self._material_states:
+            self._material_states[key] = analyze_material(material)
+        state = self._material_states[key]
+        if mesh is not None and state.image is not None and not self._image_uses_export_uv(state, mesh):
+            return replace(state, image=None, bake_color=True)
+        return state
+
+    @staticmethod
+    def _image_uses_export_uv(state: SurfaceState, mesh: Any) -> bool:
+        """Only transfer an image unchanged when its coordinates match exported UVs."""
+        uv = mesh.uv_layers.active
+        if uv is None:
+            return False
+        source = state.color_socket.links[0].from_socket
+        while source.node.type == "REROUTE":
+            source = source.node.inputs[0].links[0].from_socket
+        vector = source.node.inputs["Vector"]
+        if vector.is_linked:
+            coordinates = vector.links[0].from_socket
+            while coordinates.node.type == "REROUTE":
+                coordinates = coordinates.node.inputs[0].links[0].from_socket
+            if coordinates.node.type == "UVMAP" and coordinates.node.uv_map:
+                return coordinates.node.uv_map == uv.name
+        render_uv = next((layer for layer in mesh.uv_layers if layer.active_render), uv)
+        return render_uv.name == uv.name
+
+    def _material_for(self, material: Any, obj: Any = None, mesh: Any = None) -> skppy.Material:
+        state = self._surface_state(material, mesh)
+        needs_bake = state.bake_color or state.bake_alpha
+        do_bake = self.bake_materials and needs_bake and obj is not None and mesh is not None
+        key = (
+            material.as_pointer(),
+            obj.as_pointer() if do_bake else 0,
+            state.image is not None,
+            state.bake_color,
+            state.bake_alpha,
+        )
         if key in self._material_map:
             return self._material_map[key]
 
-        base_color, metallic, roughness, alpha, image = self._material_state(material)
+        warnings = list(state.warnings)
+        image_data = None
+        image = state.image
+        color, alpha = state.base_color, state.alpha
+        if do_bake:
+            image_data = self._bake_material_image(material, obj, mesh, state)
+            color, alpha = (1.0, 1.0, 1.0, 1.0), 1.0
+        elif needs_bake:
+            warnings.append(
+                "base-color node graph, opacity node graph or texture mapping "
+                "requires baking; using socket defaults for unrepresented inputs"
+            )
+        if warnings:
+            self.warnings.append(f"Material {material.name!r}: {'; '.join(warnings)}")
         name = self._unique_name(material.name or "Material", self._material_names)
-        skp_material = self.model.add_material(
-            name,
-            color=skppy.Color(*(self._channel(value) for value in base_color[:3])),
-            alpha=min(max(float(alpha), 0.0), 1.0),
-            metallic=min(max(float(metallic), 0.0), 1.0),
-            roughness=min(max(float(roughness), 0.0), 1.0),
-        )
-        if self.export_textures and image is not None:
-            image_data = self._image_bytes(image)
-            if image_data is not None:
-                filename = self._safe_filename(image)
-                skp_material.has_texture = True
-                skp_material.texture = skppy.Texture(
-                    filename=filename,
-                    x_scale=self._positive_custom(material, "skppy_x_scale", 1.0),
-                    y_scale=self._positive_custom(material, "skppy_y_scale", 1.0),
-                    data=image_data,
-                )
-            else:
+        skp_material = self.model.add_material(name)
+        skp_material.color = skppy.Color(*(self._channel(value) for value in color[:3]))
+        skp_material.alpha = min(max(float(alpha), 0.0), 1.0)
+        skp_material.metallic = min(max(float(state.metallic), 0.0), 1.0)
+        skp_material.roughness = min(max(float(state.roughness), 0.0), 1.0)
+        if image_data is None and self.export_textures and image is not None:
+            image_data = direct_image_bytes(image, preserve_alpha=state.preserve_image_alpha)
+            if image_data is None:
                 self.warnings.append(f"Material {material.name!r}: linked image bytes are unavailable")
+        if do_bake:
+            self._baked_material_ids.add(skp_material.id)
+        if image_data is not None:
+            filename = f"{name}.png" if do_bake else self._safe_filename(image)
+            if image_data.startswith(b"\x89PNG\r\n\x1a\n"):
+                filename = os.path.splitext(filename)[0] + ".png"
+            skp_material.has_texture = True
+            skp_material.texture = skppy.Texture(
+                filename=filename,
+                x_scale=self._positive_custom(material, "skppy_x_scale", 1.0),
+                y_scale=self._positive_custom(material, "skppy_y_scale", 1.0),
+                data=image_data,
+            )
         self._material_map[key] = skp_material
         return skp_material
 
-    def _material_state(
-        self, material: Any
-    ) -> tuple[tuple[float, float, float, float], float, float, float, Any | None]:
-        diffuse = tuple(material.diffuse_color)
-        base_color = diffuse
-        metallic = float(getattr(material, "metallic", 0.0))
-        roughness = float(getattr(material, "roughness", 1.0))
-        alpha = float(diffuse[3])
-        image = None
-        if material.use_nodes and material.node_tree is not None:
-            bsdf = material.node_tree.nodes.get("Principled BSDF")
-            if bsdf is not None:
-                self._warn_material_loss(material, bsdf)
-                base = bsdf.inputs.get("Base Color")
-                alpha_input = bsdf.inputs.get("Alpha")
-                metallic_input = bsdf.inputs.get("Metallic")
-                roughness_input = bsdf.inputs.get("Roughness")
-                if base is not None:
-                    base_color = tuple(base.default_value)
-                    image = self._linked_image(base)
-                if alpha_input is not None:
-                    alpha = float(alpha_input.default_value)
-                if metallic_input is not None:
-                    metallic = float(metallic_input.default_value)
-                if roughness_input is not None:
-                    roughness = float(roughness_input.default_value)
-        return base_color, metallic, roughness, alpha, image
-
-    def _warn_material_loss(self, material: Any, bsdf: Any) -> None:
-        """Make unsupported renderer conversion visible in export reports."""
-        omitted = []
-        for name in ("Metallic", "Roughness", "Normal"):
-            socket = bsdf.inputs.get(name)
-            if socket is not None and socket.is_linked:
-                omitted.append(f"{name} map")
-        for name, default in (("IOR", 1.5), ("IOR Level", 0.5), ("Specular IOR Level", 0.5)):
-            socket = bsdf.inputs.get(name)
-            if socket is not None and (socket.is_linked or abs(socket.default_value - default) > 1e-6):
-                omitted.append(name)
-        emission = bsdf.inputs.get("Emission Color")
-        strength = bsdf.inputs.get("Emission Strength")
-        if emission is not None and strength is not None:
-            if emission.is_linked or strength.is_linked or (strength.default_value and any(emission.default_value[:3])):
-                omitted.append("emission")
-        for node in material.node_tree.nodes:
-            if node.type == "OUTPUT_MATERIAL" and node.inputs["Displacement"].is_linked:
-                omitted.append("displacement")
-                break
-        if omitted:
-            self.warnings.append(f"Material {material.name!r}: export omits {', '.join(omitted)}")
-
-    def _linked_image(self, socket: Any, visited: set[int] | None = None) -> Any | None:
-        visited = visited or set()
-        for link in socket.links:
-            node = link.from_node
-            pointer = node.as_pointer()
-            if pointer in visited:
-                continue
-            visited.add(pointer)
-            if node.bl_idname == "ShaderNodeTexImage" and node.image is not None:
-                return node.image
-            for node_input in node.inputs:
-                image = self._linked_image(node_input, visited)
-                if image is not None:
-                    return image
-        return None
-
-    def _image_bytes(self, image: Any) -> bytes | None:
-        if image.packed_file is not None:
-            return bytes(image.packed_file.data)
-        filepath = bpy.path.abspath(image.filepath, library=image.library)
-        if filepath and Path(filepath).is_file():
-            return Path(filepath).read_bytes()
-        return None
+    def _bake_material_image(self, material: Any, obj: Any, mesh: Any, state: SurfaceState) -> bytes:
+        if not self.export_textures or not self.export_uvs:
+            raise ValueError("Material baking requires Embedded Textures and UV Coordinates")
+        try:
+            return bake_material(
+                self.context,
+                obj,
+                mesh,
+                material,
+                state,
+                resolution=self.bake_resolution,
+                margin=self.bake_margin,
+            )
+        except ValueError as exc:
+            raise ValueError(f"Material {material.name!r} on object {obj.name!r}: {exc}") from exc
 
     def _safe_filename(self, image: Any) -> str:
         source = os.path.basename(image.filepath) or image.name or "texture.png"
@@ -278,23 +262,28 @@ class BlenderModelBuilder:
         else:
             data_pointer = obj.data.as_pointer() if obj.data is not None else obj.as_pointer()
             key = ("data", data_pointer, material_key, obj.type)
-        if key in self._definition_map:
-            return self._definition_map[key]
-
-        definition = self.model.add_definition(
-            self._unique_name(
-                obj.data.name if obj.data is not None else obj.name,
-                self._definition_names,
-            )
-        )
-        self._definition_map[key] = definition
         mesh, owner = self._mesh_for_object(obj)
         try:
+            if self.export_materials and self.bake_materials:
+                states = (
+                    self._surface_state(slot.material, mesh) for slot in obj.material_slots if slot.material is not None
+                )
+                if any(state.bake_color or state.bake_alpha for state in states):
+                    key = (*key, "baked", obj.as_pointer())
+            if key in self._definition_map:
+                return self._definition_map[key]
+            definition = self.model.add_definition(
+                self._unique_name(
+                    obj.data.name if obj.data is not None else obj.name,
+                    self._definition_names,
+                )
+            )
+            self._definition_map[key] = definition
             self._populate_mesh(definition.entities, mesh, obj)
+            return definition
         finally:
             if owner is not None:
                 owner.to_mesh_clear()
-        return definition
 
     def _mesh_for_object(self, obj: Any) -> tuple[Any, Any | None]:
         if obj.type == "MESH" and not self.apply_modifiers:
@@ -335,7 +324,7 @@ class BlenderModelBuilder:
             skp_edge.flags = flags
             edge_map[edge.index] = skp_edge
 
-        uv_data = mesh.uv_layers.active.data if self.export_uvs and mesh.uv_layers.active is not None else None
+        uv_data = self._mesh_uv_data(mesh)
         for polygon in mesh.polygons:
             self._populate_polygon(entities, mesh, obj, polygon, vertex_map, edge_map, uv_data)
 
@@ -347,7 +336,7 @@ class BlenderModelBuilder:
         vertex_map: dict[int, skppy.Vertex],
     ) -> None:
         """Merge compatible coplanar polygons and emit only retained edges."""
-        uv_data = mesh.uv_layers.active.data if self.export_uvs and mesh.uv_layers.active is not None else None
+        uv_data = self._mesh_uv_data(mesh)
         projections: dict[int, skppy.FaceUVProjection] = {}
         boundaries, positions = self._coplanar_boundaries(mesh, obj, uv_data, projections)
         regions = merge_coplanar_polygons(boundaries, positions)
@@ -355,6 +344,13 @@ class BlenderModelBuilder:
         polygon_by_index = {polygon.index: polygon for polygon in mesh.polygons}
         for region in regions:
             self._populate_region(entities, mesh, obj, region, polygon_by_index, vertex_map, edge_map, projections)
+
+    def _mesh_uv_data(self, mesh: Any) -> Any | None:
+        """Return the active UV data when texture-coordinate export is enabled."""
+        if not self.export_uvs:
+            return None
+        layer = mesh.uv_layers.active
+        return layer.data if layer is not None else None
 
     def _coplanar_boundaries(
         self,
@@ -378,7 +374,7 @@ class BlenderModelBuilder:
                 continue
             normal.normalize()
             point = mesh.vertices[polygon.vertices[0]].co * self.inches_per_unit
-            material_id = self._polygon_material_id(obj, polygon.material_index)
+            material_id = self._polygon_material_id(obj, polygon.material_index, mesh)
             projection_key = None
             if uv_data is not None and material_id is not None:
                 projection = self._face_uv_projection(mesh, polygon, uv_data, normal, material_id)
@@ -469,7 +465,7 @@ class BlenderModelBuilder:
             plane=(normal.x, normal.y, normal.z, -normal.dot(point)),
             outer_loop=loops[0],
             inner_loops=loops[1:],
-            front_material_id=self._polygon_material_id(obj, polygon.material_index),
+            front_material_id=self._polygon_material_id(obj, polygon.material_index, mesh),
         )
         face.front_uv = projections.get(polygon.index)
         entities.faces.append(face)
@@ -498,7 +494,7 @@ class BlenderModelBuilder:
             return
         normal.normalize()
         point = mesh.vertices[polygon.vertices[0]].co * self.inches_per_unit
-        material_id = self._polygon_material_id(obj, polygon.material_index)
+        material_id = self._polygon_material_id(obj, polygon.material_index, mesh)
         face = skppy.Face(
             id=entities._alloc_id(),
             plane=(normal.x, normal.y, normal.z, -normal.dot(point)),
@@ -545,13 +541,13 @@ class BlenderModelBuilder:
             and not getattr(edge, "use_edge_sharp", False)
         }
 
-    def _polygon_material_id(self, obj: Any, index: int) -> int | None:
+    def _polygon_material_id(self, obj: Any, index: int, mesh: Any) -> int | None:
         if not self.export_materials or index >= len(obj.material_slots):
             return None
         material = obj.material_slots[index].material
         if material is None:
             return None
-        return self._material_for(material).id
+        return self._material_for(material, obj, mesh).id
 
     def _face_uv_projection(
         self,
@@ -580,10 +576,14 @@ class BlenderModelBuilder:
         try:
             transform = np.linalg.inv(mapping)
         except np.linalg.LinAlgError:
+            if material_id in self._baked_material_ids:
+                raise ValueError("Baked materials require nonsingular UV projections; fix the active UV map")
             transform = np.eye(3)
             self.warnings.append("Singular UV mapping replaced by identity projection")
         fitted = coordinates @ mapping
         if np.max(np.abs(fitted[:, :2] - uvs)) > 1.0e-5:
+            if material_id in self._baked_material_ids:
+                raise ValueError("Non-affine baked polygon UVs require triangulation before export")
             self.warnings.append("Non-affine polygon UVs were approximated")
         pins = [
             skppy.UVPin(

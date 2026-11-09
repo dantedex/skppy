@@ -3,11 +3,48 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
+from functools import partial
+
+from .._cancellation import check_cancelled
+from ..data_structure.images import Texture
+from ..data_structure.materials import Material
 from ..data_structure.model import Model
 from ..data_structure.layers import LayerFolder
+from ..parser.enscape_materials import apply_enscape_attributes
+from ..parser.material_parser import _parse_bounded_xml
+from ..parser.vray_materials import apply_vray_attribute_dictionaries
 
 from .parser_types import MaterialState
 from .provenance import ArchiveProvenance
+
+
+def apply_renderer_materials(model: Model, *, max_xml_bytes: int) -> None:
+    """Enrich legacy appearances without following external texture paths."""
+    parse_xml = partial(_parse_bounded_xml, max_bytes=max_xml_bytes)
+    for material in model.materials:
+        check_cancelled()
+        dictionaries = model.attribute_dictionaries_by_object_id.get(material.id, ())
+        resolve_texture = partial(_resolve_material_texture, material)
+        if not apply_enscape_attributes(material, dictionaries, parse_xml=parse_xml, resolve_texture=resolve_texture):
+            apply_vray_attribute_dictionaries(material, dictionaries)
+
+
+def _resolve_material_texture(material: Material, filename: str, brightness: float, inverted: bool) -> Texture:
+    """Reuse only this material's embedded image; retain other maps as references."""
+    basename = filename.replace("\\", "/").split("/")[-1]
+    base = material.texture
+    if base is not None:
+        matches = base.filename.replace("\\", "/").split("/")[-1].casefold() == basename.casefold()
+        return replace(
+            base,
+            filename=basename,
+            brightness=brightness,
+            inverted=inverted,
+            data=base.data if matches else None,
+            uv_scale=(1.0, 1.0),
+        )
+    return Texture(filename=basename, brightness=brightness, inverted=inverted)
 
 
 def collect_materials(provenance: ArchiveProvenance) -> tuple[MaterialState, ...]:

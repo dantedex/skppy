@@ -53,15 +53,14 @@ def test_save_does_not_touch_destination_when_validation_fails(tmp_path: Path) -
 
 
 @pytest.mark.parametrize("output_format", ["modern", "sketchup_2017"])
-def test_model_save_exports_vray_materials_for_each_public_format(tmp_path: Path, output_format: str) -> None:
+def test_save_generates_only_native_materials(tmp_path: Path, output_format: str) -> None:
     model = skppy.new_model()
     model.add_material("Paint", color=skppy.Color(255, 0, 0), metallic=0.5, roughness=0.25)
-    destination = tmp_path / f"vray-{output_format}.skp"
+    destination = tmp_path / f"native-{output_format}.skp"
 
     model.save(
         destination,
         format=output_format,  # type: ignore[arg-type]
-        export_vray_materials=True,
     )
     raw = destination.read_bytes()
 
@@ -71,5 +70,23 @@ def test_model_save_exports_vray_materials_for_each_public_format(tmp_path: Path
         encoding = "utf-8"
     else:
         encoding = "utf-16le"
-    assert "VRayInfo".encode(encoding) in raw
-    assert '"class":"BRDFVRayMtl"'.encode(encoding) in raw
+    assert "VRayInfo".encode(encoding) not in raw
+    assert "VRayPlugins".encode(encoding) not in raw
+    assert "Enscape.Material".encode(encoding) not in raw
+
+
+@pytest.mark.parametrize("option", ["export_vray_materials", "export_enscape_materials"])
+@pytest.mark.parametrize("output_format", ["modern", "sketchup_2017"])
+@pytest.mark.parametrize("use_method", [False, True])
+def test_removed_renderer_export_options_fail_before_writing(tmp_path, option, output_format, use_method) -> None:
+    model = skppy.new_model()
+    destination = tmp_path / "existing.skp"
+    destination.write_bytes(b"existing data")
+
+    with pytest.raises(TypeError, match=option):
+        if use_method:
+            model.save(destination, format=output_format, **{option: True})
+        else:
+            skppy.save(model, destination, format=output_format, **{option: True})
+
+    assert destination.read_bytes() == b"existing data"

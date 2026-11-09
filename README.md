@@ -22,6 +22,9 @@ materials. The addon converts geometry, reusable components, collection
 instances, materials/textures, UVs, tags, cameras/scenes, text annotations, and
 scalar custom properties.
 
+Enscape and V-Ray material support is import-only. Renderer-specific export
+is deferred to a future feature; native SketchUp material export is available.
+
 ## Documentation
 
 The complete documentation is published at
@@ -29,6 +32,15 @@ The complete documentation is published at
 [latest](https://dantedex.github.io/skppy/latest/) for the current development
 documentation or select a stable release such as
 [0.10.0](https://dantedex.github.io/skppy/0.10.0/) from the version menu.
+
+For the addon, start with [installation](docs/blender/installing.md),
+[import settings](docs/blender/import_options.md), and
+[export settings](docs/blender/export_options.md), including Blender UI
+screenshots. The [material export roadmap](docs/blender/material_export_plan.md)
+distinguishes delivered active-output shader adapters and opt-in CPU Cycles
+color/alpha baking from remaining work, including native PBR-map writing.
+Baking is off by default and requires existing non-overlapping 0–1 UVs; it is
+not full shader-graph conversion.
 
 Documentation sources live in [`docs/`](docs/). Build the current sources with
 `make docs`, or build all documented releases and `main` with

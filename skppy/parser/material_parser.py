@@ -68,6 +68,7 @@ import logging
 import os
 import xml.etree.ElementTree as ET
 import zipfile
+from collections.abc import Callable
 from dataclasses import fields
 from functools import partial
 from typing import Dict, List, Mapping, Optional
@@ -396,13 +397,24 @@ def _parse_material_xml(
                 image_directory=image_directory,
             )
 
-        apply_enscape_xml(candidate, mat_el, parse_xml=parse_xml, resolve_texture=resolve_texture)
-        apply_vray_xml(candidate, mat_el)
+        _apply_renderer_xml(candidate, mat_el, parse_xml=parse_xml, resolve_texture=resolve_texture)
 
     if target is not None:
         _commit_material(target, candidate)
         return target
     return candidate
+
+
+def _apply_renderer_xml(
+    material: Material,
+    element: ET.Element,
+    *,
+    parse_xml: Callable[[bytes], ET.Element],
+    resolve_texture: Callable[[str, float, bool], Texture],
+) -> None:
+    """Choose one renderer so mixed metadata does not produce a hybrid material."""
+    if not apply_enscape_xml(material, element, parse_xml=parse_xml, resolve_texture=resolve_texture):
+        apply_vray_xml(material, element)
 
 
 def _find_optional_element(
@@ -490,6 +502,12 @@ def _resolve_renderer_texture(
         if len(matches) == 1:
             texture.data = _zip_read(zip_file, matches[0], zip_name_map)
             return texture
+    if (
+        base_texture is not None
+        and base_texture.filename.replace("\\", "/").split("/")[-1].casefold() == basename.casefold()
+    ):
+        texture.data = base_texture.data
+        return texture
     matches = [path for path in paths if os.path.basename(path).casefold() == basename.casefold()]
     if len(matches) == 1:
         texture.data = _zip_read(zip_file, matches[0], zip_name_map)

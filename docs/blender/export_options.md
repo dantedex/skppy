@@ -9,6 +9,14 @@ The complete model is validated and serialized before the destination is
 replaced. A conversion or writer failure therefore leaves an existing output
 file untouched.
 
+```{figure} ../_static/screenshots/export-options.png
+:alt: Blender 4.5 SketchUp export dialog before the procedural baking controls were added.
+
+Earlier Blender 4.5 LTS export dialog. The new baking controls are described
+in the table below but are not shown in this capture. Some labels are shortened
+by the file browser.
+```
+
 ## Settings
 
 | Option | Default | Behavior |
@@ -18,9 +26,11 @@ file untouched.
 | **Inches per Blender Unit** | 39.37007874 | Converts Blender coordinates to SketchUp's internal inch unit. Use `1` when Blender units already represent inches. |
 | **Apply Modifiers** | On | Uses evaluated mesh data with the current modifier stack. Unmodified shared mesh data remains one reusable SKP definition. |
 | **Merge Coplanar Faces** | On | Merges adjacent polygons on the same plane when their material and UV projection match. Internal edges are removed and enclosed boundaries become face holes. |
-| **Materials and PBR** | On | Preserves Base Color, Alpha, Metallic, and Roughness from the Principled BSDF. |
-| **V-Ray Materials** | Off | Generates V-Ray material graphs from Base Color, Alpha, Metallic, and Roughness while retaining the normal SketchUp appearance as a fallback. |
-| **Embedded Textures** | On | Embeds packed or file-backed images linked to Base Color. Procedural-only node graphs are not baked. |
+| **Materials and PBR** | On | Exports supported color, opacity, metallic, and roughness from the active Cycles surface, with explicit warnings for approximations. |
+| **Embedded Textures** | On | Embeds compatible direct images or optional baked color/alpha textures. |
+| **Bake Procedural Color and Alpha** (`bake_materials`) | Off (`False`) | Uses CPU Cycles to bake supported linked color/alpha expressions when needed. Requires Materials and PBR, Embedded Textures, and UV Coordinates. |
+| **Bake Resolution** (`bake_resolution`) | 1024 | Width and height in pixels; integer range [16, 4096]. |
+| **Bake Margin** (`bake_margin`) | 16 | UV-island padding in pixels; integer range [0, resolution]. |
 | **UV Coordinates** | On | Converts the active UV layer to per-face SKP projections and control points. |
 | **Collections as Tags** | On | Uses `skppy_layer_name` when present; otherwise uses the object's first collection. |
 | **Cameras and Markers** | On | Exports cameras and timeline camera markers as saved SketchUp scenes. |
@@ -54,7 +64,8 @@ Blender mesh vertices and edges remain shared inside each definition. Polygon
 loop direction, smooth/sharp state, material slots, and active UV data are
 preserved. Blender supports arbitrary per-loop UVs while one SKP face stores a
 single projective mapping; non-affine n-gon mappings are fitted and reported as
-conversion warnings.
+conversion warnings for ordinary materials. Baked materials instead reject
+non-affine polygon UVs: triangulate the affected polygons before export.
 
 Coplanar merging only joins edge-connected polygons with matching orientation,
 plane, material slot, and affine UV projection. Material boundaries, UV seams,
@@ -90,36 +101,117 @@ legacy output support.
 
 ## Materials and textures
 
-The exporter reads the Principled BSDF when available and falls back to the
-material's viewport diffuse state. Linked Image Texture nodes are followed
-through intermediate nodes. Packed images and existing image files are embedded
-in the SKP; generated or procedural images without bytes produce a warning and
-leave the material untextured.
+The exporter follows the **active Cycles/ALL Material Output** Surface link,
+resolves reroutes, and identifies shaders by type: node names are irrelevant.
+If Cycles and Eevee select different outputs, a warning explains that Cycles
+wins. Missing/incompatible outputs, shader-closure node groups, Mix Shader,
+Add Shader, unsupported closures, and volume outputs use a warned viewport
+fallback; they are not flattened into an equivalent shader. Multiple material
+slots still export as separate face assignments.
+
+| Active surface | Export approximation |
+| --- | --- |
+| Principled BSDF | Base Color, Alpha, constant Metallic and Roughness; other features are not generally representable. |
+| Diffuse BSDF | Opaque color/roughness, metallic 0. |
+| Glossy / Anisotropic BSDF | Color/roughness, metallic 1, with a warning that this is not physically equivalent. |
+| Translucent, Glass, Refraction BSDF | Opaque color/roughness; transmission is lost and warned, not converted to opacity. |
+| Transparent BSDF | Constant white becomes alpha 0; tinted or linked color uses an opaque color approximation with a warning. |
+| Emission | Color only; emission strength/energy is lost and warned. |
+
+Compatible direct images are copied without baking: packed or file-backed,
+unmodified sRGB/straight-alpha images using flat projection, repeat extension,
+and UV coordinates matching the exported active UV layer. Reroutes are allowed.
+The exporter no longer selects an arbitrary image hidden upstream. Mapping,
+color math, mixed images, alternate UVs, generated images, or dirty pixel buffers
+require evaluation through the optional bake path; with baking off, omitted
+color/alpha expressions use socket defaults with explicit warnings.
+
+Image alpha is preserved directly only when that same Image Texture's Alpha
+output drives the shader Alpha input. Otherwise the color image is exported
+opaque (re-encoded if necessary), and scalar shader opacity remains separate.
+An unused image alpha channel or a color socket's fourth component is not an
+implicit opacity mask.
+
+```{figure} ../_static/screenshots/principled-material.png
+:alt: Blue paint material with constant Base Color, Metallic, Roughness, and Alpha on a Principled BSDF.
+
+A simple constant-input material exports without baking. The Principled node
+may be renamed; it must feed the active Cycles/ALL output. IOR and other
+unsupported shader features are not part of the exported subset.
+```
+
+### Preparing a material today
+
+1. Connect a supported single shader to the active Cycles/ALL Material Output.
+2. Prefer constants and compatible direct images when possible. Save or pack
+   intended image bytes for direct transfer.
+3. For procedural color or Alpha, enable **Bake Procedural Color and Alpha**,
+   along with materials, textures, and UV export. Set resolution and margin.
+4. Put the source object in **Object mode**. Supply an existing active UV map
+   with finite, nondegenerate, non-overlapping destination triangles inside
+   **0–1**. There is **no automatic unwrap**. Triangulate polygons whose UVs
+   cannot be represented by an affine per-face mapping.
+5. Review warnings and inspect the result in the target SketchUp version.
+   Successful conversion is not a promise of full shader fidelity.
+
+### Optional baking: scope and cost
+
+Only supported **color and alpha expressions** are baked, including procedural
+textures, ramps, math/mixes, and color-expression node groups. Shader-closure
+groups and Mix/Add Shader networks remain unsupported even with baking enabled.
+Linked Metallic/Roughness use their socket defaults with explicit warnings;
+normal/bump, displacement, transmission, coat, sheen, subsurface, IOR/specular,
+and emission energy are not preserved by a color bake.
+
+Baking runs **synchronously on CPU Cycles**, even for an Eevee source scene.
+Expect export time and memory use to grow with resolution and object/material
+count. There is no modal progress or cancellation guarantee. The baker uses
+export-only mesh/material copies and a temporary scene, cleans up on success
+or error, and does not overwrite source images or change user preferences.
+Color and scalar alpha are evaluated separately through unlit emission passes,
+then encoded as an sRGB-color, straight-alpha RGBA PNG; alpha is linear coverage,
+not display-transformed. A separate Alpha graph is combined into that image.
+The exported color and opacity multipliers become white and 1, avoiding double
+multiplication. Transmission is not coverage.
+
+The result freezes appearance at the current frame/subframe. Procedural bakes
+create **per-object/material variants**, and affected shared meshes lose
+cross-object component-definition reuse. Compatible direct materials retain
+reuse; this is not an atlas or a general object-independent bake cache.
+
+The baker rejects context-dependent sources such as Object Info, Camera Data,
+Light Path, Shader to RGB, particle/hair information, unsafe Geometry outputs,
+and camera/window/reflection/normal or instancer coordinates. Material/node-tree
+drivers (including expression groups), sequence/movie images, and tiled/UDIM
+images are unsupported. Invalid/overlapping UVs, excessive UV-validation work,
+Cycles failures, singular projections, and non-affine baked polygons also abort
+rather than silently substituting an unrelated image. Conversion/bake errors
+occur before saving, so an existing destination remains intact.
 
 Optional material custom properties `skppy_x_scale` and `skppy_y_scale` set the
 physical texture tile size in SketchUp inches. Both default to `1.0`.
 
-When **V-Ray Materials** is enabled, the exporter adds a deterministic
-`MtlSingleBRDF` -> `BRDFVRayMtl` graph to every exported material. Base colour
-is converted from sRGB to V-Ray's linear colour representation; opacity,
-metallic, and roughness remain normalized factors. The graph targets the V-Ray
-metadata generation observed for each output container: plugin version 23 for
-modern SKP and version 16 for SketchUp Make 2017.
-
-The ordinary SketchUp material and native PBR block are always written too, so
-SketchUp and importers without V-Ray retain a useful appearance. An embedded
-base-colour image is also connected through a V-Ray `TexBitmap`,
-`BitmapBuffer`, and `UVWGenChannel` graph. The bitmap uses the same embedded
-image basename and face UV channel as the native SketchUp texture.
+Enscape and V-Ray materials are supported for import only. Renderer-specific
+export is deferred to a future feature; this exporter writes native SketchUp
+materials.
 
 The export material subset is Base Color, Alpha, Metallic, Roughness, and the
 base-color image. Import support for renderer maps does not imply export
 support for those maps. The Python writer rejects unsupported public material
 properties rather than silently discarding them; it also rejects duplicate
-material names. V-Ray export does not broaden this subset.
+material names.
 The Blender adapter reports omitted renderer maps, non-default IOR/specular,
 emission, and displacement as conversion warnings before returning its supported
 material subset. Review these warnings when exporting imported render materials.
+
+Modern files carry metallic/roughness factors. The legacy path can retain these
+as `skppy` compatibility metadata, but that does not make SketchUp 2017 a native
+PBR renderer. Use classic color/texture/opacity expectations for that target.
+
+The Python writer is unchanged: baking uses its existing base-texture support.
+Native PBR-map writing and renderer-specific export remain deferred. See the
+[Material Export Roadmap](material_export_plan.md) for the delivered subset,
+historical review, and remaining work.
 
 ## Tags, cameras, and text
 

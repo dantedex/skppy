@@ -225,7 +225,6 @@ def save(
     *,
     header: SkpHeader | None = None,
     format: Literal["modern", "sketchup_2017"] = "modern",
-    export_vray_materials: bool = False,
 ) -> Path:
     """
     Save a SketchUp model to a .skp file.
@@ -242,9 +241,6 @@ def save(
     format : {"modern", "sketchup_2017"}, optional
         Output container. ``"modern"`` writes the current ZIP/VFF format;
         ``"sketchup_2017"`` writes the pre-ZIP SketchUp Make 2017 format.
-    export_vray_materials : bool, optional
-        Generate V-Ray material metadata from each material's color, opacity,
-        metallic, and roughness values. Disabled by default.
 
     Returns
     -------
@@ -264,12 +260,14 @@ def save(
             model,
             filepath,
             header=header,
-            export_vray_materials=export_vray_materials,
         )
     if format == "sketchup_2017":
         if header is not None:
             raise ValueError("A modern VFF header cannot be used with SketchUp 2017 format")
         from .legacy_writter import write_legacy_2017_model
 
-        return write_legacy_2017_model(model, filepath, export_vray_materials=export_vray_materials)
+        return write_legacy_2017_model(
+            model,
+            filepath,
+        )
     raise ValueError(f"Unknown SKP output format: {format!r}")
