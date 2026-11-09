@@ -12,6 +12,8 @@ blender_skp_io/blender_skp_io/
 +- annotation_builder.py# Text and dimension conversion
 +- blender_manifest.toml# Extension manifest (version, Blender minimum)
 +- export_builder.py    # BlenderModelBuilder - Blender to public Model
++- export_materials.py  # Read-only active Cycles surface analysis and adapters
++- material_baker.py    # Isolated optional CPU Cycles color/alpha baking
 +- material_builder.py  # Isolated material nodes and packed image resources
 +- import_transaction.py# Failure cleanup for newly created data-blocks
 +- scene_builder.py     # BlenderSceneBuilder - main conversion logic
@@ -60,11 +62,15 @@ When the user clicks **Export SketchUp**, `EXPORT_OT_skp` creates a
 `BlenderModelBuilder` with the file-browser settings. The builder:
 
 1. Resolves the selected, visible, or complete scene object scope.
-2. Creates SketchUp tags from collections and materials from Principled BSDF
-   state, including packed or file-backed texture images.
+2. Creates SketchUp tags from collections. `export_materials.py` analyzes the
+   active Cycles/ALL Material Output by shader type, following reroutes; node
+   names are irrelevant. It supplies direct values/images, basic shader
+   approximations, or an explicitly warned viewport fallback.
 3. Converts Blender mesh data to shared SKP component definitions. Repeated
    unmodified mesh datablocks reuse one definition; evaluated modifier results
-   receive independent definitions when necessary.
+   receive independent definitions when necessary. Optional procedural bakes
+   also create per-object/material variants and separate affected definitions,
+   sacrificing cross-object reuse to avoid sharing the wrong baked appearance.
 4. Places objects as root instances with inch-scaled world transforms and maps
    collection-instance Empties to definitions containing nested instances.
    Collection members use parent-relative transforms and the collection's
@@ -74,6 +80,48 @@ When the user clicks **Export SketchUp**, `EXPORT_OT_skp` creates a
    dictionaries.
 6. Calls `Model.save()`, which validates and assembles the complete container
    before replacing the destination.
+
+### Export material analysis and baking
+
+`SurfaceState` retains color/alpha destination sockets and separates read-only
+analysis from public material creation. Principled, Diffuse, Glossy/Anisotropic,
+Translucent, Transparent, Glass, Refraction, and Emission have bounded adapters;
+transmission and emission energy are not preserved. Shader-closure groups,
+Mix/Add Shader, unsupported closures, and volume outputs use a warned viewport
+fallback. Color-expression groups can instead be evaluated by the baker.
+Linked Metallic/Roughness retain socket defaults with explicit warnings;
+normal/bump, displacement, IOR/specular, and other unsupported features are not
+made exportable by baking color.
+
+Compatible direct images must be unmodified byte-backed sRGB/straight-alpha
+images with flat/repeat mapping and UVs matching the exported active layer.
+Intrinsic image alpha is retained only when the same texture's Alpha output
+feeds shader Alpha; otherwise color pixels are opaque and scalar opacity is
+separate. The analyzer does not search for arbitrary upstream images.
+
+`bake_materials=False` is the default. **Bake Procedural Color and Alpha**
+enables synchronous CPU Cycles evaluation when color/alpha require it, with
+`bake_resolution=1024` (integer [16, 4096]) and `bake_margin=16` (integer
+[0, resolution]). Materials, textures, and UV export must be enabled. Source
+objects must be in Object mode and supply an existing active, finite,
+nondegenerate, non-overlapping 0–1 UV layout; there is no automatic unwrap.
+
+`material_baker.py` copies the export mesh, object, and material into a temporary
+scene at the current frame/subframe. Separate unlit emission passes evaluate
+color and scalar alpha into an sRGB-color, straight-alpha RGBA PNG. It uses
+white color and opacity 1 in the exported material to avoid double application.
+Temporary datablocks are cleaned up on success/exception; source images and
+user preferences are not overwritten. Baking has no modal progress or
+cancellation guarantee. Context-dependent sources, drivers, sequence/movie/UDIM
+images, invalid UVs, and Cycles failures are rejected, not silently replaced
+with another image. Non-affine baked polygons require triangulation before
+export; singular baked projections also fail. Errors leave the destination
+intact because conversion precedes saving.
+
+The writer is unchanged: baked images use the existing base-texture field.
+Native PBR-map writing and renderer-specific export remain deferred. See
+[Export Options](export_options.md) for exact adapter/UV limits and the
+[Material Export Roadmap](material_export_plan.md) for remaining work.
 
 Mesh conversion keeps one SKP vertex and edge per Blender mesh element and
 builds directed face loops from Blender loop edge indices. Active per-loop UVs

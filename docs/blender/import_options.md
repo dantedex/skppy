@@ -10,6 +10,13 @@ embedded texture, preserves its physical texture scale in the
 survives saving even before it is assigned to an object. Package contents are
 authoritative, so downloaded SKM packages incorrectly named `.skp` also work.
 
+```{figure} ../_static/screenshots/import-options.png
+:alt: Blender 4.5 SketchUp import dialog showing scale, geometry, and scene options.
+
+The import dialog in Blender 4.5 LTS. Full option labels and defaults are listed
+below; narrow file-browser panels may shorten labels.
+```
+
 Options that affect collections and object parenting are illustrated together
 in [Imported Scene Organization](scene_organization.md).
 
