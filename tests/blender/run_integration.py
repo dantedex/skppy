@@ -22,6 +22,9 @@ from material_isolation import run as run_material_isolation
 from edge_shading import run as run_edge_shading
 from texture_interchange import run as run_texture_interchange
 from enscape_materials import run as run_enscape_materials
+from export_material_baking import run as run_export_material_baking
+from export_material_integration import run as run_export_material_integration
+from export_shader_analysis import run as run_export_shader_analysis
 
 
 def _arguments() -> argparse.Namespace:
@@ -917,6 +920,9 @@ def main() -> None:
     """Install the addon and execute all requested integration scenarios."""
     args = _arguments()
     module_name = _install_extension(args.addon)
+    run_export_shader_analysis(module_name)
+    run_export_material_baking(module_name)
+    run_export_material_integration(module_name)
     run_enscape_materials(module_name, _png_rgba(255))
     run_material_isolation(module_name)
     run_edge_shading(module_name)
